@@ -1,12 +1,12 @@
 # Scoop Bucket for ms (Meta Skill)
 
-This is the official Scoop bucket for [ms](https://github.com/Dicklesworthstone/meta_skill) - a local-first skill management platform for AI agents.
+This is the official Scoop bucket for [ms](https://github.com/quangdang46/ms) - a local-first skill management platform for AI agents.
 
 ## Installation
 
 ```powershell
 # Add the bucket
-scoop bucket add ms https://github.com/Dicklesworthstone/scoop-bucket
+scoop bucket add ms https://github.com/quangdang46/scoop-bucket
 
 # Install ms
 scoop install ms/ms
@@ -15,7 +15,7 @@ scoop install ms/ms
 Or install directly in one command:
 
 ```powershell
-scoop install https://raw.githubusercontent.com/Dicklesworthstone/scoop-bucket/main/bucket/ms.json
+scoop install https://raw.githubusercontent.com/quangdang46/scoop-bucket/main/bucket/ms.json
 ```
 
 ## Updating
@@ -46,7 +46,7 @@ ms search "error handling"
 ms suggest
 ```
 
-For full documentation, see the [ms README](https://github.com/Dicklesworthstone/meta_skill#readme).
+For full documentation, see the [ms README](https://github.com/quangdang46/ms#readme).
 
 ## Supported Platforms
 
@@ -72,7 +72,7 @@ If you need to manually trigger a manifest update:
 
 Issues and suggestions related to the Scoop bucket should be filed in this repository.
 
-For issues with ms itself, please file them in the [main repository](https://github.com/Dicklesworthstone/meta_skill/issues).
+For issues with ms itself, please file them in the [main repository](https://github.com/quangdang46/ms/issues).
 
 ## License
 

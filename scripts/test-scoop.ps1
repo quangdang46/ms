@@ -33,7 +33,7 @@ $ErrorActionPreference = "Stop"
 
 # Configuration
 $BucketName = "ms"
-$BucketUrl = "https://github.com/Dicklesworthstone/scoop-bucket"
+$BucketUrl = "https://github.com/quangdang46/scoop-bucket"
 $FormulaName = "ms"
 $LogFile = "$env:TEMP\ms-scoop-test-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 

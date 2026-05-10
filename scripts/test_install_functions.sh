@@ -32,8 +32,8 @@ ORIGINAL_PATH="$PATH"
 
 # Source the real installer functions. Keeping this pointed at install.sh
 # prevents unit tests from drifting behind installer changes.
-# shellcheck source=scripts/install.sh
-source "$SCRIPT_DIR/install.sh" --source-only
+# shellcheck source=install.sh
+source "$SCRIPT_DIR/../install.sh" --source-only
 
 echo "=== Install Script Unit Tests ==="
 echo ""
@@ -160,7 +160,7 @@ test_binary_name() {
 
 # Test 11: Repo is correctly set
 test_repo_setting() {
-    if [[ "$REPO" == "Dicklesworthstone/meta_skill" ]]; then
+    if [[ "$REPO" == "quangdang46/ms" ]]; then
         pass "REPO is correctly set"
     else
         fail "REPO is not correct: $REPO"
@@ -229,7 +229,7 @@ test_latest_redirect_curl() {
     mkdir -p "$stub_dir"
     cat > "$stub_dir/curl" <<'EOF'
 #!/bin/bash
-printf '%s' 'https://github.com/Dicklesworthstone/meta_skill/releases/tag/v9.8.7'
+printf '%s' 'https://github.com/quangdang46/ms/releases/tag/v9.8.7'
 EOF
     chmod +x "$stub_dir/curl"
 
@@ -256,7 +256,7 @@ test_latest_redirect_rejects_invalid() {
     mkdir -p "$stub_dir"
     cat > "$stub_dir/curl" <<'EOF'
 #!/bin/bash
-printf '%s' 'https://github.com/Dicklesworthstone/meta_skill/releases/tag/not-a-version'
+printf '%s' 'https://github.com/quangdang46/ms/releases/tag/not-a-version'
 EOF
     chmod +x "$stub_dir/curl"
 

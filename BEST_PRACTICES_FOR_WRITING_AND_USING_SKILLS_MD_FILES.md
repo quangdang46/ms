@@ -618,7 +618,7 @@ grep -i "keyword" references/
 
 ## 17. Advanced Patterns from Production Skills
 
-Learnings from real-world skill collections (Dicklesworthstone's Agent Flywheel stack):
+Learnings from real-world skill collections (quangdang46's Agent Flywheel stack):
 
 ### 17.1 "THE EXACT PROMPT" Pattern
 
@@ -874,4 +874,4 @@ For refinement workflows, specify iteration counts:
 - [Claude Skills Deep Dive - Lee Han Chung](https://leehanchung.github.io/blogs/2025/10/26/claude-skills-deep-dive/)
 - [Claude Code Customization Guide - alexop.dev](https://alexop.dev/posts/claude-code-customization-guide-claudemd-skills-subagents/)
 - [Claude Skills & CLAUDE.md Guide - gend.co](https://www.gend.co/blog/claude-skills-claude-md-guide)
-- Dicklesworthstone Agent Flywheel Skills Collection (real-world patterns)
+- quangdang46 Agent Flywheel Skills Collection (real-world patterns)

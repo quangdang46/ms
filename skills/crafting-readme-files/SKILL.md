@@ -476,7 +476,7 @@ Study these READMEs for patterns:
 
 | Project | Notable Pattern |
 |---------|-----------------|
-| [xf](https://github.com/Dicklesworthstone/xf) | Comprehensive CLI docs, search deep-dives |
+| [xf](https://github.com/quangdang46/xf) | Comprehensive CLI docs, search deep-dives |
 | [ripgrep](https://github.com/BurntSushi/ripgrep) | Benchmarks, comparison tables |
 | [bat](https://github.com/sharkdp/bat) | GIF demos, feature highlights |
 | [exa](https://github.com/ogham/exa) | Screenshot galleries, color themes |

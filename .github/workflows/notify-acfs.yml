@@ -58,7 +58,7 @@ jobs:
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.ACFS_DISPATCH_TOKEN }}
-          repository: Dicklesworthstone/agentic_coding_flywheel_setup
+          repository: quangdang46/agentic_coding_flywheel_setup
           event-type: installer-updated
           client-payload: |
             {

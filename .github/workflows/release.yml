@@ -311,12 +311,12 @@ jobs:
 
             **Homebrew** (macOS/Linux)
             ```bash
-            brew install Dicklesworthstone/tap/ms
+            brew install quangdang46/tap/ms
             ```
 
             **Scoop** (Windows)
             ```powershell
-            scoop bucket add dicklesworthstone https://github.com/Dicklesworthstone/scoop-bucket
+            scoop bucket add quangdang46 https://github.com/quangdang46/scoop-bucket
             scoop install ms
             ```
         env:
@@ -344,7 +344,7 @@ jobs:
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.TAP_UPDATE_TOKEN }}
-          repository: Dicklesworthstone/homebrew-tap
+          repository: quangdang46/homebrew-tap
           event-type: release
           client-payload: '{"version": "${{ needs.validate.outputs.version }}", "repository": "${{ github.repository }}"}'
         continue-on-error: true
@@ -356,9 +356,9 @@ jobs:
           echo "A repository dispatch event has been sent to update the Homebrew tap formula." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: ${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Target**: Dicklesworthstone/homebrew-tap" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target**: quangdang46/homebrew-tap" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Check the [homebrew-tap repository](https://github.com/Dicklesworthstone/homebrew-tap/actions) for the update PR." >> $GITHUB_STEP_SUMMARY
+          echo "Check the [homebrew-tap repository](https://github.com/quangdang46/homebrew-tap/actions) for the update PR." >> $GITHUB_STEP_SUMMARY
 
   # Trigger Scoop bucket update
   update-scoop:
@@ -372,7 +372,7 @@ jobs:
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.BUCKET_UPDATE_TOKEN }}
-          repository: Dicklesworthstone/scoop-bucket
+          repository: quangdang46/scoop-bucket
           event-type: release
           client-payload: '{"version": "${{ needs.validate.outputs.version }}", "repository": "${{ github.repository }}"}'
         continue-on-error: true
@@ -384,9 +384,9 @@ jobs:
           echo "A repository dispatch event has been sent to update the Scoop bucket manifest." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: ${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Target**: Dicklesworthstone/scoop-bucket" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target**: quangdang46/scoop-bucket" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Check the [scoop-bucket repository](https://github.com/Dicklesworthstone/scoop-bucket/actions) for the update PR." >> $GITHUB_STEP_SUMMARY
+          echo "Check the [scoop-bucket repository](https://github.com/quangdang46/scoop-bucket/actions) for the update PR." >> $GITHUB_STEP_SUMMARY
 
   # Announce release (optional - can be enabled with a Slack/Discord webhook)
   # announce:

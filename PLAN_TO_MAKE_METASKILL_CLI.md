@@ -8555,9 +8555,9 @@ name: rust-toolkit
 version: 1.0.0
 channel: stable
 description: Essential skills for Rust development
-author: Dicklesworthstone
+author: quangdang46
 license: MIT
-homepage: https://github.com/Dicklesworthstone/rust-toolkit-skills
+homepage: https://github.com/quangdang46/rust-toolkit-skills
 
 skills:
   - id: rust-async-patterns
@@ -8636,10 +8636,10 @@ pub async fn publish_to_github(
 │                        BUNDLE INSTALLATION FLOW                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  $ ms bundle install Dicklesworthstone/rust-toolkit-skills                  │
+│  $ ms bundle install quangdang46/rust-toolkit-skills                  │
 │                                                                             │
 │  1. Resolve bundle location                                                 │
-│     └─► GitHub API: GET /repos/Dicklesworthstone/rust-toolkit-skills        │
+│     └─► GitHub API: GET /repos/quangdang46/rust-toolkit-skills        │
 │     └─► Select release channel (stable/beta)                               │
 │                                                                             │
 │  2. Fetch bundle manifest                                                   │
@@ -8986,8 +8986,8 @@ ms share --repo my-skills
 ms share --export skills.json
 
 # Import from share URL
-ms import https://gist.github.com/Dicklesworthstone/abc123
-ms import https://github.com/Dicklesworthstone/my-skills
+ms import https://gist.github.com/quangdang46/abc123
+ms import https://github.com/quangdang46/my-skills
 ms import ./skills.json
 
 # Show current share URL
@@ -9010,8 +9010,8 @@ ms share --dry-run
 │  $ ms sync status                                                           │
 │                                                                             │
 │  Upstream Bundles (3)                                                       │
-│  ├── Dicklesworthstone/rust-toolkit    v2.1.0 ✓ (up to date)              │
-│  ├── Dicklesworthstone/go-patterns     v1.5.0 ⟳ (update available: 1.6.0) │
+│  ├── quangdang46/rust-toolkit    v2.1.0 ✓ (up to date)              │
+│  ├── quangdang46/go-patterns     v1.5.0 ⟳ (update available: 1.6.0) │
 │  └── custom/my-team-skills             v3.0.0 ✓                            │
 │                                                                             │
 │  Skill Status (12 total)                                                    │
@@ -9701,7 +9701,7 @@ conflict_strategy = "prefer-remote"
 ```rust
 pub struct Updater {
     current_version: Version,
-    github_repo: String,  // "Dicklesworthstone/meta_skill"
+    github_repo: String,  // "quangdang46/meta_skill"
     binary_name: String,
 }
 
@@ -10358,10 +10358,10 @@ name = "meta_skill"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-authors = ["Dicklesworthstone"]
+authors = ["quangdang46"]
 description = "Skill management and generation CLI for AI coding agents"
 license = "MIT"
-repository = "https://github.com/Dicklesworthstone/meta_skill"
+repository = "https://github.com/quangdang46/ms"
 
 [[bin]]
 name = "ms"
@@ -10656,7 +10656,7 @@ Output the complete updated SKILL.md.
 
 ```bash
 # Clone the repository
-git clone https://github.com/Dicklesworthstone/meta_skill.git
+git clone https://github.com/quangdang46/ms.git
 cd meta_skill
 
 # Build in release mode

@@ -1,6 +1,6 @@
 #!/bin/bash
-# ms installer - https://github.com/Dicklesworthstone/meta_skill
-# Usage: curl -sSL https://raw.githubusercontent.com/Dicklesworthstone/meta_skill/main/scripts/install.sh | bash
+# ms installer - https://github.com/quangdang46/ms
+# Usage: curl -sSL https://raw.githubusercontent.com/quangdang46/ms/main/install.sh | bash
 #
 # Options:
 #   --install-dir DIR  Install directory (default: ~/.local/bin)
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 # Configuration
-REPO="Dicklesworthstone/meta_skill"
+REPO="quangdang46/ms"
 BINARY_NAME="ms"
 DEFAULT_INSTALL_DIR="${HOME}/.local/bin"
 
@@ -60,16 +60,16 @@ Environment variables:
 
 Examples:
   # Install latest version
-  curl -sSL https://raw.githubusercontent.com/Dicklesworthstone/meta_skill/main/scripts/install.sh | bash
+  curl -sSL https://raw.githubusercontent.com/quangdang46/ms/main/install.sh | bash
 
   # Non-interactive install with auto PATH configuration
-  curl -sSL https://raw.githubusercontent.com/Dicklesworthstone/meta_skill/main/scripts/install.sh | bash -s -- --easy-mode
+  curl -sSL https://raw.githubusercontent.com/quangdang46/ms/main/install.sh | bash -s -- --easy-mode
 
   # Install specific version
-  curl -sSL https://raw.githubusercontent.com/Dicklesworthstone/meta_skill/main/scripts/install.sh | VERSION=v0.1.5 bash
+  curl -sSL https://raw.githubusercontent.com/quangdang46/ms/main/install.sh | VERSION=v0.1.5 bash
 
   # Install to custom directory
-  curl -sSL https://raw.githubusercontent.com/Dicklesworthstone/meta_skill/main/scripts/install.sh | INSTALL_DIR=/usr/local/bin bash
+  curl -sSL https://raw.githubusercontent.com/quangdang46/ms/main/install.sh | INSTALL_DIR=/usr/local/bin bash
 EOF
 }
 

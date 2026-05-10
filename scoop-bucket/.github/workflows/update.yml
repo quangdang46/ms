@@ -27,7 +27,7 @@ permissions:
   pull-requests: write
 
 env:
-  RELEASE_REPO: Dicklesworthstone/meta_skill
+  RELEASE_REPO: quangdang46/ms
 
 jobs:
   update:

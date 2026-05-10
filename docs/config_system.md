@@ -52,7 +52,7 @@ The `ru` backend handles repo synchronization for skill sources. Configure it un
 enabled = true
 ru_path = "/usr/local/bin/ru" # optional, auto-detect if unset
 skill_repos = [
-  "Dicklesworthstone/claude-code-skills",
+  "quangdang46/claude-code-skills",
   "myorg/internal-skills@main"
 ]
 auto_index = true

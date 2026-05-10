@@ -1,12 +1,12 @@
 # Homebrew Tap for ms (Meta Skill)
 
-This is the official Homebrew tap for [ms](https://github.com/Dicklesworthstone/meta_skill) - a local-first skill management platform for AI agents.
+This is the official Homebrew tap for [ms](https://github.com/quangdang46/ms) - a local-first skill management platform for AI agents.
 
 ## Installation
 
 ```bash
 # Add the tap
-brew tap dicklesworthstone/tap
+brew tap quangdang46/tap
 
 # Install ms
 brew install ms
@@ -15,7 +15,7 @@ brew install ms
 Or install directly in one command:
 
 ```bash
-brew install dicklesworthstone/tap/ms
+brew install quangdang46/tap/ms
 ```
 
 ## Updating
@@ -46,7 +46,7 @@ ms search "error handling"
 ms suggest
 ```
 
-For full documentation, see the [ms README](https://github.com/Dicklesworthstone/meta_skill#readme).
+For full documentation, see the [ms README](https://github.com/quangdang46/ms#readme).
 
 ## Supported Platforms
 
@@ -74,7 +74,7 @@ If you need to manually trigger a formula update:
 
 Issues and suggestions related to the Homebrew formula should be filed in this repository.
 
-For issues with ms itself, please file them in the [main repository](https://github.com/Dicklesworthstone/meta_skill/issues).
+For issues with ms itself, please file them in the [main repository](https://github.com/quangdang46/ms/issues).
 
 ## License
 

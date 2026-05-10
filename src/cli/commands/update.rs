@@ -13,7 +13,7 @@ use crate::updater::{
 use serde_json;
 
 /// Default repository for updates.
-const DEFAULT_REPO: &str = "Dicklesworthstone/meta_skill";
+const DEFAULT_REPO: &str = "quangdang46/ms";
 
 #[derive(Args, Debug)]
 #[command(disable_version_flag = true)]

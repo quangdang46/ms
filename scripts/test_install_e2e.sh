@@ -82,7 +82,7 @@ test_github_releases_accessible() {
     log "Testing GitHub releases accessibility..."
 
     local effective_url version response
-    if effective_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/Dicklesworthstone/meta_skill/releases/latest" 2>&1); then
+    if effective_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/quangdang46/ms/releases/latest" 2>&1); then
         version="${effective_url##*/}"
         if [[ -n "$version" && "$version" =~ ^v[0-9] && "$version" != *"/"* ]]; then
             pass "GitHub releases accessible, latest: $version"
@@ -90,7 +90,7 @@ test_github_releases_accessible() {
         fi
     fi
 
-    if response=$(curl -sS "https://api.github.com/repos/Dicklesworthstone/meta_skill/releases/latest" 2>&1); then
+    if response=$(curl -sS "https://api.github.com/repos/quangdang46/ms/releases/latest" 2>&1); then
         if [[ "$response" == *"tag_name"* ]]; then
             version=$(echo "$response" | grep -o '"tag_name": "[^"]*"' | head -1 | cut -d'"' -f4)
             pass "GitHub releases accessible, latest: $version"
@@ -126,7 +126,7 @@ test_default_install() {
     local output exit_code=0
     output=$(HOME="$temp_dir" INSTALL_DIR="$temp_dir/bin" \
              ${TEST_VERSION:+VERSION="$TEST_VERSION"} \
-             timeout 120 "$SCRIPT_DIR/install.sh" 2>&1) || exit_code=$?
+             timeout 120 "$SCRIPT_DIR/../install.sh" 2>&1) || exit_code=$?
 
     if [[ $exit_code -eq 0 ]] && [[ -x "$temp_dir/bin/ms" ]]; then
         pass "Default installation succeeded"
@@ -160,7 +160,7 @@ test_custom_dir_install() {
     local output exit_code=0
     output=$(HOME="$temp_dir" INSTALL_DIR="$custom_dir" \
              ${TEST_VERSION:+VERSION="$TEST_VERSION"} \
-             timeout 120 "$SCRIPT_DIR/install.sh" 2>&1) || exit_code=$?
+             timeout 120 "$SCRIPT_DIR/../install.sh" 2>&1) || exit_code=$?
 
     if [[ $exit_code -eq 0 ]] && [[ -x "$custom_dir/ms" ]]; then
         pass "Custom directory installation succeeded"
@@ -187,7 +187,7 @@ test_checksum_verification() {
     output=$(HOME="$temp_dir" INSTALL_DIR="$temp_dir/bin" \
              VERIFY=true \
              ${TEST_VERSION:+VERSION="$TEST_VERSION"} \
-             timeout 120 "$SCRIPT_DIR/install.sh" 2>&1) || exit_code=$?
+             timeout 120 "$SCRIPT_DIR/../install.sh" 2>&1) || exit_code=$?
 
     if [[ $exit_code -eq 0 ]]; then
         if [[ "$output" == *"Checksum verified"* ]] || [[ "$output" == *"checksum"* ]]; then
@@ -218,7 +218,7 @@ test_skip_checksum() {
     local output exit_code=0
     output=$(HOME="$temp_dir" INSTALL_DIR="$temp_dir/bin" \
              ${TEST_VERSION:+VERSION="$TEST_VERSION"} \
-             timeout 120 "$SCRIPT_DIR/install.sh" --no-verify 2>&1) || exit_code=$?
+             timeout 120 "$SCRIPT_DIR/../install.sh" --no-verify 2>&1) || exit_code=$?
 
     if [[ $exit_code -eq 0 ]] && [[ -x "$temp_dir/bin/ms" ]]; then
         if [[ "$output" == *"skipped"* ]] || [[ "$output" == *"--no-verify"* ]]; then
@@ -254,7 +254,7 @@ test_specific_version() {
     local output exit_code=0
     output=$(HOME="$temp_dir" INSTALL_DIR="$temp_dir/bin" \
              VERSION="$TEST_VERSION" \
-             timeout 120 "$SCRIPT_DIR/install.sh" 2>&1) || exit_code=$?
+             timeout 120 "$SCRIPT_DIR/../install.sh" 2>&1) || exit_code=$?
 
     if [[ $exit_code -eq 0 ]] && [[ -x "$temp_dir/bin/ms" ]]; then
         # Check if installed version matches
@@ -291,7 +291,7 @@ test_idempotent_install() {
     local output1 exit_code1=0
     output1=$(HOME="$temp_dir" INSTALL_DIR="$temp_dir/bin" \
               ${TEST_VERSION:+VERSION="$TEST_VERSION"} \
-              timeout 120 "$SCRIPT_DIR/install.sh" 2>&1) || exit_code1=$?
+              timeout 120 "$SCRIPT_DIR/../install.sh" 2>&1) || exit_code1=$?
 
     if [[ $exit_code1 -ne 0 ]]; then
         fail "First installation failed"
@@ -303,7 +303,7 @@ test_idempotent_install() {
     local output2 exit_code2=0
     output2=$(HOME="$temp_dir" INSTALL_DIR="$temp_dir/bin" \
               ${TEST_VERSION:+VERSION="$TEST_VERSION"} \
-              timeout 120 "$SCRIPT_DIR/install.sh" 2>&1) || exit_code2=$?
+              timeout 120 "$SCRIPT_DIR/../install.sh" 2>&1) || exit_code2=$?
 
     if [[ $exit_code2 -eq 0 ]] && [[ -x "$temp_dir/bin/ms" ]]; then
         pass "Idempotent installation succeeded (ran twice without error)"
@@ -329,7 +329,7 @@ test_binary_functionality() {
     local output exit_code=0
     output=$(HOME="$temp_dir" INSTALL_DIR="$temp_dir/bin" \
              ${TEST_VERSION:+VERSION="$TEST_VERSION"} \
-             timeout 120 "$SCRIPT_DIR/install.sh" 2>&1) || exit_code=$?
+             timeout 120 "$SCRIPT_DIR/../install.sh" 2>&1) || exit_code=$?
 
     if [[ $exit_code -ne 0 ]]; then
         fail "Installation failed"

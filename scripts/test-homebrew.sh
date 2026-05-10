@@ -19,7 +19,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-TAP_NAME="dicklesworthstone/tap"
+TAP_NAME="quangdang46/tap"
 FORMULA_NAME="ms"
 LOG_FILE="/tmp/ms-homebrew-test-$(date +%Y%m%d-%H%M%S).log"
 

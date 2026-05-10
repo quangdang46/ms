@@ -15,6 +15,14 @@
 <div align="center">
 <h3>Quick Install</h3>
 
+**Via installer (Linux/macOS):**
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/quangdang46/ms/main/install.sh?$(date +%s)" | bash
+```
+
+**Via cargo:**
+
 ```bash
 cargo install --path .
 ```
@@ -803,7 +811,7 @@ Graph commands require bv (beads_viewer):
 
 ```bash
 # Install beads_viewer
-cargo install --git https://github.com/Dicklesworthstone/beads_viewer
+cargo install --git https://github.com/quangdang46/beads_viewer
 ```
 
 ### "Search returns no results"

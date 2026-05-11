@@ -564,6 +564,7 @@ mod tests {
         fs::write(&outside, "secret").unwrap();
 
         // Create symlink inside root pointing outside
+        #[cfg(unix)]
         let symlink = root.join("escape");
         #[cfg(unix)]
         std::os::unix::fs::symlink(&outside, &symlink).unwrap();

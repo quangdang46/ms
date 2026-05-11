@@ -143,6 +143,10 @@ jobs:
                 COPILOT_WORKSPACE AGENT_MODE IDE_AGENT CONTINUE_DEV \
                 SOURCEGRAPH_CODY TABNINE_AGENT AMAZON_Q GEMINI_CODE
           cargo llvm-cov clean --workspace
+          # Build the instrumented binary first and expose it to integration
+          # tests that locate ms via the MS_BIN env var.
+          cargo llvm-cov --no-report --all-features --bin ms
+          export MS_BIN="$(pwd)/target/llvm-cov-target/debug/ms"
           cargo llvm-cov --no-report --all-features --lib
           cargo llvm-cov --no-report --all-features --test cli
           cargo llvm-cov --no-report --all-features --test integration

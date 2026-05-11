@@ -96,7 +96,17 @@ jobs:
         with:
           cache-on-failure: true
       - name: Run tests (excluding e2e — covered by e2e.yml workflow)
+        shell: bash
         run: |
+          # Unset CI/agent env vars so output detection tests behave the same
+          # in CI as on developer machines.
+          unset CI GITHUB_ACTIONS GITLAB_CI JENKINS_URL TRAVIS CIRCLECI \
+                BUILDKITE BITBUCKET_PIPELINES TF_BUILD TEAMCITY_VERSION \
+                DRONE WOODPECKER \
+                CLAUDE_CODE CURSOR_AI OPENAI_CODEX AIDER_MODE \
+                CODEIUM_ENABLED WINDSURF_AGENT COPILOT_AGENT \
+                COPILOT_WORKSPACE AGENT_MODE IDE_AGENT CONTINUE_DEV \
+                SOURCEGRAPH_CODY TABNINE_AGENT AMAZON_Q GEMINI_CODE
           cargo test --lib --all-features
           cargo test --test cli --all-features
           cargo test --test integration --all-features

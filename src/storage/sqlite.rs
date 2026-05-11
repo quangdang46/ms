@@ -1693,11 +1693,11 @@ pub fn merge_skill_metadata(skill: &SkillRecord, parsed_meta: &SkillMetadata) ->
                 .map(str::to_string)
         })
         .or_else(|| {
-            CanonicalId::parse(&skill.id).map(|canonical| {
+            CanonicalId::parse(&skill.id).ok().map(|canonical| {
                 if canonical.provider == DEFAULT_PROVIDER {
                     skill.id.clone()
                 } else {
-                    canonical.skill_id
+                    canonical.skill_id()
                 }
             })
         })

@@ -333,10 +333,10 @@ fn import_single_skill(
     let mut archived_spec = skill.spec.clone();
     ensure_compact_route_metadata(&mut archived_spec);
     archived_spec.metadata.provider = skill.provider.clone();
-    let canonical = crate::core::ids::CanonicalId::new(&skill.provider, &skill_id);
+    let canonical = crate::core::ids::CanonicalId::new(&skill.provider, &skill_id)?;
     archived_spec.metadata.canonical_id = canonical.to_canonical_string();
     archived_spec.metadata.display_id =
-        canonical.display(is_unambiguous(&skill_id, collision_report));
+        canonical.display();
     canonicalize_provider_references(&mut archived_spec, same_provider_ids);
     archived_spec.archive_format_version = Some(SkillSpec::ARCHIVE_FORMAT_VERSION.to_string());
     archived_spec.provenance = Some(SkillProvenance {

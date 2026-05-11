@@ -139,19 +139,13 @@ jobs:
           cache-on-failure: true
       - name: Install cargo-deny
         uses: taiki-e/install-action@cargo-deny
-      - name: Install cargo-audit
-        uses: taiki-e/install-action@cargo-audit
       - name: Check advisories and licenses
         run: cargo deny check
-      - name: Run security audit
-        # RUSTSEC-2025-0140: gix-date — requires vergen-gix major version bump
-        run: cargo audit --ignore RUSTSEC-2025-0140
       - name: Security summary
         if: always()
         run: |
           echo "## Security Audit" >> $GITHUB_STEP_SUMMARY
           echo "- cargo deny: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- cargo audit: completed" >> $GITHUB_STEP_SUMMARY
 
   # Final status check for branch protection
   ci-success:

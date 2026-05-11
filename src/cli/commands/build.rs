@@ -595,9 +595,7 @@ impl BeadsTracker {
     pub fn new(bead_id: String, close_on_success: bool) -> Option<Self> {
         let client = BeadsClient::new();
         if !client.is_available() {
-            eprintln!(
-                "Warning: beads (bd) not available, skipping bead tracking"
-            );
+            eprintln!("Warning: beads (bd) not available, skipping bead tracking");
             return None;
         }
         Some(Self {
@@ -620,9 +618,7 @@ impl BeadsTracker {
             }
             Err(e) => {
                 // Non-blocking: log warning but don't fail the build
-                eprintln!(
-                    "Warning: failed to update bead {}: {}", self.bead_id, e
-                );
+                eprintln!("Warning: failed to update bead {}: {}", self.bead_id, e);
                 Ok(())
             }
         }
@@ -633,7 +629,8 @@ impl BeadsTracker {
         let completion = BuildCompletion::success(self.duration_secs());
         if let Err(e) = self.append_completion_note(&completion) {
             eprintln!(
-                "Warning: failed to append completion note for {}: {}", self.bead_id, e
+                "Warning: failed to append completion note for {}: {}",
+                self.bead_id, e
             );
         }
 
@@ -641,20 +638,20 @@ impl BeadsTracker {
             match self.client.close(&self.bead_id, None) {
                 Ok(_) => {
                     eprintln!(
-                        "Bead: {} closed (build successful: {})", self.bead_id, skill_name
+                        "Bead: {} closed (build successful: {})",
+                        self.bead_id, skill_name
                     );
                     Ok(())
                 }
                 Err(e) => {
-                    eprintln!(
-                        "Warning: failed to close bead {}: {}", self.bead_id, e
-                    );
+                    eprintln!("Warning: failed to close bead {}: {}", self.bead_id, e);
                     Ok(())
                 }
             }
         } else {
             eprintln!(
-                "Bead: {} build completed (close disabled: {})", self.bead_id, skill_name
+                "Bead: {} build completed (close disabled: {})",
+                self.bead_id, skill_name
             );
             Ok(())
         }
@@ -669,9 +666,7 @@ impl BeadsTracker {
                 Ok(())
             }
             Err(e) => {
-                eprintln!(
-                    "Warning: failed to update bead {}: {}", self.bead_id, e
-                );
+                eprintln!("Warning: failed to update bead {}: {}", self.bead_id, e);
                 Ok(())
             }
         }
@@ -720,9 +715,7 @@ pub fn run(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
         && !args.guided
         && ctx.output_format == OutputFormat::Human
     {
-        eprintln!(
-            "Warning: Using --no-redact or --no-injection-filter bypasses safety filters."
-        );
+        eprintln!("Warning: Using --no-redact or --no-injection-filter bypasses safety filters.");
         eprint!("Continue? [y/N] ");
         io::stdout().flush()?;
         let mut input = String::new();
@@ -746,10 +739,7 @@ pub fn run(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
             Ok(Some(cm_ctx)) => {
                 if ctx.output_format == OutputFormat::Human {
                     if !cm_ctx.seed_rules.is_empty() {
-                        eprintln!(
-                            "Info: Loaded {} CM rules as seeds",
-                            cm_ctx.seed_rules.len()
-                        );
+                        eprintln!("Info: Loaded {} CM rules as seeds", cm_ctx.seed_rules.len());
                     }
                     if !cm_ctx.anti_patterns.is_empty() {
                         eprintln!(
@@ -762,9 +752,7 @@ pub fn run(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
             }
             Ok(None) => {
                 if ctx.output_format == OutputFormat::Human {
-                    eprintln!(
-                        "Warning: CM not available, proceeding without CM context"
-                    );
+                    eprintln!("Warning: CM not available, proceeding without CM context");
                 }
                 None
             }
@@ -1414,9 +1402,7 @@ fn output_timeout(
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!(
-            "\nTimeout: Build timed out at phase: {}", session.phase
-        );
+        println!("\nTimeout: Build timed out at phase: {}", session.phase);
         println!("  Progress: {:.0}%", session.overall_progress() * 100.0);
         println!("  Checkpoint saved. Resume with:");
         println!("    ms build --resume {}", session.session_id);
@@ -1596,9 +1582,7 @@ fn run_resume(
             });
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
-            println!(
-                "Error: No checkpoint found for session: {}", session_id
-            );
+            println!("Error: No checkpoint found for session: {}", session_id);
             println!("\nTo list available checkpoints:");
             println!("  ls {}/.ms/checkpoints/", ctx.ms_root.display());
         }
@@ -1618,7 +1602,8 @@ fn run_resume(
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
             println!(
-                "Error: Checkpoint {} is not from a build operation (type: {})", session_id, checkpoint.operation_type
+                "Error: Checkpoint {} is not from a build operation (type: {})",
+                session_id, checkpoint.operation_type
             );
         }
         return Ok(());
@@ -1707,9 +1692,7 @@ fn run_resume(
         }
         _ => {
             if ctx.output_format == OutputFormat::Human {
-                println!(
-                    "\nWarning: Unknown checkpoint phase: {}", checkpoint.phase
-                );
+                println!("\nWarning: Unknown checkpoint phase: {}", checkpoint.phase);
                 println!("  This checkpoint may be from an older version.");
             }
         }

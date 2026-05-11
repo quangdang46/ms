@@ -223,11 +223,7 @@ fn run_single(ctx: &AppContext, args: &ImportArgs) -> Result<()> {
                 domain: args.domain.clone(),
                 tags: generated.skill.metadata.tags.clone(),
             },
-            warnings: generated
-                .warnings
-                .iter()
-                .map(format_warning)
-                .collect(),
+            warnings: generated.warnings.iter().map(format_warning).collect(),
             suggestions: generated
                 .suggestions
                 .iter()

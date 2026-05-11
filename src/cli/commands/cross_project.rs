@@ -249,7 +249,9 @@ fn run_patterns(ctx: &AppContext, args: &CrossProjectPatternsArgs) -> Result<()>
     let (aggregates, scanned) =
         collect_pattern_aggregates(ctx, &cass, &args.query, args.limit, args.include_unknown)?;
 
-    let mut patterns: Vec<PatternSummary> = aggregates.into_values().filter_map(|agg| agg.into_summary(args.min_occurrences, args.min_projects))
+    let mut patterns: Vec<PatternSummary> = aggregates
+        .into_values()
+        .filter_map(|agg| agg.into_summary(args.min_occurrences, args.min_projects))
         .collect();
 
     patterns.sort_by(|a, b| b.occurrences.cmp(&a.occurrences));
@@ -300,7 +302,9 @@ fn run_gaps(ctx: &AppContext, args: &CrossProjectGapsArgs) -> Result<()> {
     let (aggregates, scanned) =
         collect_pattern_aggregates(ctx, &cass, &args.query, args.limit, args.include_unknown)?;
 
-    let mut summaries: Vec<PatternSummary> = aggregates.into_values().filter_map(|agg| agg.into_summary(args.min_occurrences, args.min_projects))
+    let mut summaries: Vec<PatternSummary> = aggregates
+        .into_values()
+        .filter_map(|agg| agg.into_summary(args.min_occurrences, args.min_projects))
         .collect();
 
     summaries.sort_by(|a, b| b.occurrences.cmp(&a.occurrences));

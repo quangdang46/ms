@@ -473,8 +473,10 @@ mod tests {
 
     #[test]
     fn test_list_filter_display() {
-        let skills = [make_skill("alpha", "base", false),
-            make_skill("beta", "project", false)];
+        let skills = [
+            make_skill("alpha", "base", false),
+            make_skill("beta", "project", false),
+        ];
         // Filter by layer
         let filtered: Vec<_> = skills
             .iter()
@@ -632,9 +634,11 @@ mod tests {
 
     #[test]
     fn test_list_sort_by_name() {
-        let mut skills = [make_skill("zulu", "base", false),
+        let mut skills = [
+            make_skill("zulu", "base", false),
             make_skill("alpha", "base", false),
-            make_skill("mike", "base", false)];
+            make_skill("mike", "base", false),
+        ];
         skills.sort_by(|a, b| a.name.cmp(&b.name));
         assert_eq!(skills[0].name, "alpha");
         assert_eq!(skills[1].name, "mike");

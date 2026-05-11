@@ -458,28 +458,27 @@ fn validate_remote_flags(
     clear_branch: bool,
     clear_auth: bool,
 ) -> Result<()> {
-    if !matches!(remote_type, RemoteType::Git)
-        && (has_branch || clear_branch) {
-            return Err(MsError::Config(
-                "--branch is only valid for git remotes".to_string(),
-            ));
-        }
-    if !matches!(remote_type, RemoteType::Git | RemoteType::JfpCloud)
-        && (has_auth || clear_auth) {
-            return Err(MsError::Config(
-                "auth flags are only valid for git or jfp-cloud remotes".to_string(),
-            ));
-        }
+    if !matches!(remote_type, RemoteType::Git) && (has_branch || clear_branch) {
+        return Err(MsError::Config(
+            "--branch is only valid for git remotes".to_string(),
+        ));
+    }
+    if !matches!(remote_type, RemoteType::Git | RemoteType::JfpCloud) && (has_auth || clear_auth) {
+        return Err(MsError::Config(
+            "auth flags are only valid for git or jfp-cloud remotes".to_string(),
+        ));
+    }
     Ok(())
 }
 
 fn validate_auth_for_remote(remote_type: &RemoteType, auth: Option<&RemoteAuth>) -> Result<()> {
     if matches!(remote_type, RemoteType::JfpCloud)
-        && matches!(auth, Some(RemoteAuth::SshKey { .. })) {
-            return Err(MsError::Config(
-                "jfp-cloud remotes only support token auth".to_string(),
-            ));
-        }
+        && matches!(auth, Some(RemoteAuth::SshKey { .. }))
+    {
+        return Err(MsError::Config(
+            "jfp-cloud remotes only support token auth".to_string(),
+        ));
+    }
     Ok(())
 }
 

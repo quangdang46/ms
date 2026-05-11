@@ -241,9 +241,9 @@ impl<'a> ErrorRenderer<'a> {
 
             let content = format!("{}\n\nSuggestion: {}", cause.message, cause.suggestion);
 
-            let panel = Panel::from_text(&content).title(title).border_style(
-                Style::new().color(Color::parse("yellow").unwrap_or_default()),
-            );
+            let panel = Panel::from_text(&content)
+                .title(title)
+                .border_style(Style::new().color(Color::parse("yellow").unwrap_or_default()));
 
             eprintln!("{}", panel.render_plain(self.width.saturating_sub(2)));
         }

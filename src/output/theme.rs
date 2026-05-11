@@ -1086,7 +1086,6 @@ impl BoxStyle {
     }
 }
 
-
 impl FromStr for BoxStyle {
     type Err = ThemeError;
 
@@ -1147,7 +1146,6 @@ impl TreeGuides {
     }
 }
 
-
 impl FromStr for TreeGuides {
     type Err = ThemeError;
 
@@ -1197,7 +1195,6 @@ impl ProgressStyle {
         }
     }
 }
-
 
 impl FromStr for ProgressStyle {
     type Err = ThemeError;
@@ -1260,7 +1257,10 @@ pub fn detect_terminal_background() -> TerminalBackground {
     }
 
     if let Ok(val) = std::env::var("COLORFGBG") {
-        let bg = val.split(';').next_back().or_else(|| val.split(':').next_back());
+        let bg = val
+            .split(';')
+            .next_back()
+            .or_else(|| val.split(':').next_back());
         if let Some(code) = bg.and_then(|v| v.parse::<u8>().ok()) {
             if code == 7 || code == 15 || (248..=255).contains(&code) {
                 return TerminalBackground::Light;

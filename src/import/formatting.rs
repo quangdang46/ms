@@ -228,10 +228,10 @@ pub fn detect_language(code: &str) -> Option<String> {
     // YAML indicators
     if code.lines().all(|l| {
         l.trim().is_empty() || l.contains(": ") || l.starts_with('-') || l.starts_with('#')
-    })
-        && code.contains(": ") {
-            return Some("yaml".to_string());
-        }
+    }) && code.contains(": ")
+    {
+        return Some("yaml".to_string());
+    }
 
     // JSON indicators
     if (code.starts_with('{') && code.ends_with('}'))

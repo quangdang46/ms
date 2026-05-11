@@ -21,8 +21,7 @@ use std::io::{self, Write};
 // =============================================================================
 
 /// The level of fallback being used.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum FallbackLevel {
     /// Full rich output available.
     Full,
@@ -59,7 +58,6 @@ impl FallbackLevel {
         }
     }
 }
-
 
 // =============================================================================
 // FallbackRenderer

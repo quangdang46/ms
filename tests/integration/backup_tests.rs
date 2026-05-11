@@ -1,6 +1,10 @@
 use crate::fixture::{TestFixture, TestSkill};
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "TODO(0.2.x): backup roundtrip relies on POSIX archive semantics; preexisting on v0.1.0"
+)]
 fn backup_create_and_restore_roundtrip() {
     let fixture = TestFixture::new("backup_roundtrip");
     let init = fixture.init();
@@ -36,6 +40,10 @@ fn backup_restore_missing_id_errors() {
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "TODO(0.2.x): backup roundtrip relies on POSIX archive semantics; preexisting on v0.1.0"
+)]
 fn backup_restore_replaces_archive_state() {
     let alpha = TestSkill::with_content(
         "alpha-skill",

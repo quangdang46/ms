@@ -399,12 +399,12 @@ fn emit_compress_output(ctx: &AppContext, compressed: &CompressedSkill) -> Resul
             layout.push_line(&compressed.summary);
             layout.blank();
             layout.section("Rehydrate");
-            layout.push_line(&format!("`{}`", compressed.rehydrate_cmd));
+            layout.push_line(format!("`{}`", compressed.rehydrate_cmd));
             if !compressed.section_rehydrate_cmds.is_empty() {
                 layout.blank();
                 layout.section("Section Rehydrate Commands");
                 for sec in &compressed.section_rehydrate_cmds {
-                    layout.push_line(&format!(
+                    layout.push_line(format!(
                         "  `{}` — {} ({} words)",
                         sec.rehydrate_cmd, sec.title, sec.words
                     ));

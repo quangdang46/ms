@@ -604,11 +604,9 @@ impl RichOutput {
                 let padding = (width.saturating_sub(t.len() + 2)) / 2;
                 let styled_title = self.render_style(&self.theme.colors.header, t);
                 println!(
-                    "{}{}{}{}{}",
+                    "{} {} {}",
                     box_chars.horizontal.repeat(padding),
-                    " ",
                     styled_title,
-                    " ",
                     box_chars.horizontal.repeat(width - padding - t.len() - 2)
                 );
             } else {

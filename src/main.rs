@@ -16,7 +16,7 @@ fn main() -> ExitCode {
     apply_process_output_overrides(&cli);
     init_tracing(&cli);
 
-    let stdout_guard = cli.quiet.then(|| gag::Gag::stdout()).transpose();
+    let stdout_guard = cli.quiet.then(gag::Gag::stdout).transpose();
     let result = match stdout_guard {
         Ok(guard) => {
             let result = run(&cli);

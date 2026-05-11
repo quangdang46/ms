@@ -22,6 +22,7 @@ use std::io::{self, Write};
 
 /// The level of fallback being used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum FallbackLevel {
     /// Full rich output available.
     Full,
@@ -30,6 +31,7 @@ pub enum FallbackLevel {
     /// ANSI colors only, no complex rendering.
     ColorOnly,
     /// Plain text, no styling whatsoever.
+    #[default]
     Plain,
 }
 
@@ -58,11 +60,6 @@ impl FallbackLevel {
     }
 }
 
-impl Default for FallbackLevel {
-    fn default() -> Self {
-        FallbackLevel::Plain
-    }
-}
 
 // =============================================================================
 // FallbackRenderer

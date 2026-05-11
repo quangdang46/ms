@@ -49,12 +49,12 @@ fn detection_benchmarks(c: &mut Criterion) {
 
     // Terminal capabilities detection (color system, unicode, hyperlinks)
     group.bench_function("terminal_capabilities", |b| {
-        b.iter(|| detect_terminal_capabilities());
+        b.iter(detect_terminal_capabilities);
     });
 
     // RichOutput construction (plain)
     group.bench_function("richoutput_plain", |b| {
-        b.iter(|| RichOutput::plain());
+        b.iter(RichOutput::plain);
     });
 
     // OutputDecision to RichOutput
@@ -328,12 +328,12 @@ fn theme_benchmarks(c: &mut Criterion) {
 
     // Theme construction
     group.bench_function("theme_default", |b| {
-        b.iter(|| Theme::default());
+        b.iter(Theme::default);
     });
 
     // Theme auto-detect
     group.bench_function("theme_auto_detect", |b| {
-        b.iter(|| Theme::auto_detect());
+        b.iter(Theme::auto_detect);
     });
 
     // Theme with ASCII fallback

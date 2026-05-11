@@ -835,7 +835,7 @@ impl MultiProgress {
             let plain = bar.inner.render_plain(self.width);
 
             if i > 0 {
-                eprint!("\n");
+                eprintln!();
             }
             eprint!("\r{plain}");
         }

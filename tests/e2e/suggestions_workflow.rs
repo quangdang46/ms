@@ -539,9 +539,8 @@ fn test_suggest_bandit_reset() -> Result<()> {
         "ok",
         "Reset should succeed"
     );
-    assert_eq!(
+    assert!(
         json["reset"].as_bool().unwrap_or(false),
-        true,
         "Reset flag should be true"
     );
 

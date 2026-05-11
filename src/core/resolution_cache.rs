@@ -1198,7 +1198,7 @@ impl SkillContentCache {
         if let Ok(entries) = std::fs::read_dir(&self.cache_dir) {
             for entry in entries.flatten() {
                 if entry.file_name().to_string_lossy().starts_with(&prefix) {
-                    std::fs::remove_file(&entry.path()).ok();
+                    std::fs::remove_file(entry.path()).ok();
                 }
             }
         }
@@ -1219,8 +1219,8 @@ impl SkillContentCache {
     pub fn clear(&self) {
         if let Ok(entries) = std::fs::read_dir(&self.cache_dir) {
             for entry in entries.flatten() {
-                if entry.path().extension().map_or(false, |e| e == "json") {
-                    std::fs::remove_file(&entry.path()).ok();
+                if entry.path().extension().is_some_and(|e| e == "json") {
+                    std::fs::remove_file(entry.path()).ok();
                 }
             }
         }
@@ -1234,7 +1234,7 @@ impl SkillContentCache {
         let mut count = 0;
         if let Ok(entries) = std::fs::read_dir(&self.cache_dir) {
             for entry in entries.flatten() {
-                if entry.path().extension().map_or(false, |e| e == "json") {
+                if entry.path().extension().is_some_and(|e| e == "json") {
                     count += 1;
                 }
             }

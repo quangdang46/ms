@@ -520,7 +520,7 @@ fn record_auto_load_events(
     let extractor = DefaultFeatureExtractor::new();
     let history_path = UserHistory::default_path();
     let mut history = UserHistory::load(&history_path);
-    let features = extractor.extract_from_collected(&collected, &history);
+    let features = extractor.extract_from_collected(collected, &history);
 
     // Record each skill load to user history
     for result in loaded_skills {
@@ -2086,6 +2086,6 @@ mod tests {
     #[test]
     fn test_load_terminal_width() {
         let width = terminal_width();
-        assert!(width >= 40 && width <= 500);
+        assert!((40..=500).contains(&width));
     }
 }

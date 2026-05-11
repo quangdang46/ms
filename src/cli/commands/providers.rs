@@ -308,7 +308,7 @@ fn sync_provider_root(
 
                 let prev_hash = stored.skills.get(&rel_path);
                 let is_new = prev_hash.is_none();
-                let changed = prev_hash.map_or(true, |p| *p != hash);
+                let changed = prev_hash.is_none_or(|p| *p != hash);
 
                 if is_new {
                     report.new_count += 1;

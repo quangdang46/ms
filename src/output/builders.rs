@@ -116,7 +116,7 @@ pub fn skill_panel_with_width(name: &str, description: &str, layer: &str, width:
     let content = format!("{description}\n\nLayer: {layer}");
     let panel = Panel::from_text(&content)
         .title(name.to_string())
-        .border_style(Style::new().color(Color::parse("cyan").unwrap_or(Color::default())));
+        .border_style(Style::new().color(Color::parse("cyan").unwrap_or_default()));
     panel.render_plain(width)
 }
 
@@ -154,7 +154,7 @@ pub fn skill_detail_panel_with_width(
     let full_content = format!("{header}\n\n{content}");
     let panel = Panel::from_text(&full_content)
         .title(name.to_string())
-        .border_style(Style::new().color(Color::parse("cyan").unwrap_or(Color::default())));
+        .border_style(Style::new().color(Color::parse("cyan").unwrap_or_default()));
     panel.render_plain(width)
 }
 
@@ -305,7 +305,7 @@ pub fn error_panel(title: &str, message: &str) -> String {
 pub fn error_panel_with_width(title: &str, message: &str, width: usize) -> String {
     let panel = Panel::from_text(message)
         .title(format!("✗ {title}"))
-        .border_style(Style::new().color(Color::parse("red").unwrap_or(Color::default())));
+        .border_style(Style::new().color(Color::parse("red").unwrap_or_default()));
     panel.render_plain(width)
 }
 
@@ -327,7 +327,7 @@ pub fn error_panel_with_hint_and_width(
     let content = format!("{message}\n\nHint: {hint}");
     let panel = Panel::from_text(&content)
         .title(format!("✗ {title}"))
-        .border_style(Style::new().color(Color::parse("red").unwrap_or(Color::default())));
+        .border_style(Style::new().color(Color::parse("red").unwrap_or_default()));
     panel.render_plain(width)
 }
 
@@ -343,7 +343,7 @@ pub fn warning_panel(title: &str, message: &str) -> String {
 pub fn warning_panel_with_width(title: &str, message: &str, width: usize) -> String {
     let panel = Panel::from_text(message)
         .title(format!("⚠ {title}"))
-        .border_style(Style::new().color(Color::parse("yellow").unwrap_or(Color::default())));
+        .border_style(Style::new().color(Color::parse("yellow").unwrap_or_default()));
     panel.render_plain(width)
 }
 
@@ -359,7 +359,7 @@ pub fn success_panel(title: &str, message: &str) -> String {
 pub fn success_panel_with_width(title: &str, message: &str, width: usize) -> String {
     let panel = Panel::from_text(message)
         .title(format!("✓ {title}"))
-        .border_style(Style::new().color(Color::parse("green").unwrap_or(Color::default())));
+        .border_style(Style::new().color(Color::parse("green").unwrap_or_default()));
     panel.render_plain(width)
 }
 

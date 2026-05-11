@@ -956,7 +956,7 @@ mod integration_tests {
             ("Bug 2", IssueType::Bug),
         ] {
             let issue = client
-                .create(&CreateIssueRequest::new(title).with_type(issue_type.clone()))
+                .create(&CreateIssueRequest::new(title).with_type(issue_type))
                 .expect("Create should succeed");
             created_ids.push(issue.id);
             env.log().debug(
@@ -1152,7 +1152,7 @@ mod integration_tests {
         // Create baseline data
         for i in 0..10 {
             client
-                .create(&CreateIssueRequest::new(&format!("Perf Test {}", i)))
+                .create(&CreateIssueRequest::new(format!("Perf Test {}", i)))
                 .expect("Create should succeed");
         }
 

@@ -654,7 +654,7 @@ mod tests {
 
         // Cold start should have exploration bonus
         let score = bandit.sample("rust-errors", &features);
-        assert!(score >= 0.0 && score <= 1.0);
+        assert!((0.0..=1.0).contains(&score));
     }
 
     #[test]

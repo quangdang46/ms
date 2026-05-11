@@ -118,7 +118,7 @@ fn test_serial_access_baseline() {
     // Create issues serially
     let mut created_count = 0;
     for i in 0..10 {
-        let req = CreateIssueRequest::new(&format!("Serial Test {}", i));
+        let req = CreateIssueRequest::new(format!("Serial Test {}", i));
         match client.create(&req) {
             Ok(issue) => {
                 created_count += 1;
@@ -286,7 +286,7 @@ fn test_concurrent_writes_no_corruption() {
                 let mut successes = 0;
                 let mut failures = 0;
                 for j in 0..5 {
-                    let req = CreateIssueRequest::new(&format!("Concurrent {} - {}", thread_id, j));
+                    let req = CreateIssueRequest::new(format!("Concurrent {} - {}", thread_id, j));
                     match client.create(&req) {
                         Ok(_) => successes += 1,
                         Err(e) => {
@@ -382,7 +382,7 @@ fn test_sync_after_each_agent_pattern() {
         // Agent does some work
         let mut agent_created = 0;
         for i in 0..3 {
-            let req = CreateIssueRequest::new(&format!("Agent {} Task {}", agent_id, i));
+            let req = CreateIssueRequest::new(format!("Agent {} Task {}", agent_id, i));
             match client.create(&req) {
                 Ok(_) => agent_created += 1,
                 Err(e) => {
@@ -518,7 +518,7 @@ fn test_interleaved_read_write() {
 
         let mut successes = 0;
         for i in 0..10 {
-            let req = CreateIssueRequest::new(&format!("Interleaved Write {}", i));
+            let req = CreateIssueRequest::new(format!("Interleaved Write {}", i));
             if client.create(&req).is_ok() {
                 successes += 1;
             }
@@ -623,7 +623,7 @@ fn test_stress_rapid_concurrent_ops() {
                 for j in 0..5 {
                     // Alternate between read and write
                     if j % 2 == 0 {
-                        let req = CreateIssueRequest::new(&format!("Stress {} - {}", thread_id, j));
+                        let req = CreateIssueRequest::new(format!("Stress {} - {}", thread_id, j));
                         if client.create(&req).is_ok() {
                             ops += 1;
                         }

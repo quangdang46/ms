@@ -55,6 +55,11 @@ jobs:
           echo "Computed SHA256: $SHA256"
 
       - name: Notify ACFS
+        # ACFS_DISPATCH_TOKEN is an optional PAT used to ping the ACFS repo when
+        # the installer changes. Skip the step entirely (and never fail the job)
+        # when the secret is not configured in this fork or repo settings.
+        if: ${{ secrets.ACFS_DISPATCH_TOKEN != '' }}
+        continue-on-error: true
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.ACFS_DISPATCH_TOKEN }}

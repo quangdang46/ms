@@ -158,8 +158,13 @@ jobs:
             echo "::group::Testing: $name"
             echo "Command: $cmd"
 
-            if eval "$cmd" 2>&1 | tee "$output_file"; then
-              if jq -e "$jq_check" "$output_file" > /dev/null 2>&1; then
+            # Robot mode emits structured JSON on stdout; tracing logs go to stderr.
+            # Suppress stderr so jq only sees the result JSON. Some commands emit a
+            # stream of JSON values, so slurp with `-s` and check that at least one
+            # object satisfies the filter.
+            if RUST_LOG=error eval "$cmd" 2>/dev/null | tee "$output_file"; then
+              if jq -se "[.[] | $jq_check] | map(select(. != null and . != false)) | length > 0" \
+                   "$output_file" > /dev/null 2>&1; then
                 echo "::endgroup::"
                 echo ":white_check_mark: $name" >> "$GITHUB_STEP_SUMMARY"
                 TESTS_PASSED=$((TESTS_PASSED + 1))

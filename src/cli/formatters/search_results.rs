@@ -277,7 +277,7 @@ impl SearchResults {
         header
     }
 
-    /// Format as plain TSV (bd-olwb spec: SCORE<TAB>NAME<TAB>LAYER<TAB>DESCRIPTION).
+    /// Format as plain TSV (bd-olwb spec: `SCORE\tNAME\tLAYER\tDESCRIPTION`).
     ///
     /// No headers, just data rows for easy parsing with cut/awk.
     fn format_plain(&self) -> String {
@@ -302,7 +302,7 @@ impl SearchResults {
     fn format_tsv(&self) -> String {
         let mut out = String::from("id\tname\tlayer\tscore\tquality\tdescription\n");
         for r in &self.results {
-            let desc = r.skill.description.replace('\t', " ").replace('\n', " ");
+            let desc = r.skill.description.replace(['\t', '\n'], " ");
             out.push_str(&format!(
                 "{}\t{}\t{}\t{:.4}\t{:.2}\t{}\n",
                 r.skill.id,

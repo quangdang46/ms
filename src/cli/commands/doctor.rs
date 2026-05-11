@@ -1329,11 +1329,11 @@ mod tests {
     fn test_doctor_render_environment_info() {
         // Environment info lines should be plain text
         let lines = [
-            format!("> Configuration"),
-            format!("  Format:     Human"),
-            format!("  Robot Mode: false"),
-            format!("> Terminal"),
-            format!("  is_terminal(): true"),
+            "> Configuration".to_string(),
+            "  Format:     Human".to_string(),
+            "  Robot Mode: false".to_string(),
+            "> Terminal".to_string(),
+            "  is_terminal(): true".to_string(),
         ];
         for line in &lines {
             assert!(!line.contains("\x1b["), "no ANSI in env info: {line}");
@@ -1356,7 +1356,7 @@ mod tests {
 
     #[test]
     fn test_doctor_plain_output_format() {
-        let header = format!("{}", "ms doctor - Health Checks");
+        let header = "ms doctor - Health Checks".to_string();
         assert!(!header.contains("\x1b["), "header should be plain text");
         assert!(header.contains("ms doctor"));
     }

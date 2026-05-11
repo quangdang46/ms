@@ -137,9 +137,5 @@ fn cooldown_remaining_seconds(entry: &CooldownEntry, now: DateTime<Utc>) -> u64 
     // This avoids overflow when cooldown_seconds > i64::MAX
     let elapsed_u64 = elapsed as u64;
 
-    if elapsed_u64 >= entry.cooldown_seconds {
-        0
-    } else {
-        entry.cooldown_seconds - elapsed_u64
-    }
+    entry.cooldown_seconds.saturating_sub(elapsed_u64)
 }

@@ -2080,7 +2080,7 @@ mod tests {
         assert!(json.contains("candidates"));
         assert!(json.contains("load_command"));
         assert!(
-            json.contains("search_command") == false,
+            !json.contains("search_command"),
             "no fallback for match"
         );
         // Roundtrip
@@ -2108,7 +2108,7 @@ mod tests {
         let json = serde_json::to_string_pretty(&response).unwrap();
         assert!(json.contains("search_command"));
         assert!(
-            json.contains("suggest_command") == false,
+            !json.contains("suggest_command"),
             "suggest_command should be omitted when None"
         );
         // Verify fallback contract: search_command always present for no_match

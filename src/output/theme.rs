@@ -1019,7 +1019,9 @@ impl Default for ThemeIcons {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum BoxStyle {
+    #[default]
     Rounded,
     Square,
     Heavy,
@@ -1084,11 +1086,6 @@ impl BoxStyle {
     }
 }
 
-impl Default for BoxStyle {
-    fn default() -> Self {
-        BoxStyle::Rounded
-    }
-}
 
 impl FromStr for BoxStyle {
     type Err = ThemeError;
@@ -1109,7 +1106,9 @@ impl FromStr for BoxStyle {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TreeGuides {
+    #[default]
     Unicode,
     Rounded,
     Ascii,
@@ -1148,11 +1147,6 @@ impl TreeGuides {
     }
 }
 
-impl Default for TreeGuides {
-    fn default() -> Self {
-        TreeGuides::Unicode
-    }
-}
 
 impl FromStr for TreeGuides {
     type Err = ThemeError;
@@ -1171,7 +1165,9 @@ impl FromStr for TreeGuides {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ProgressStyle {
+    #[default]
     Block,
     Ascii,
     Line,
@@ -1202,11 +1198,6 @@ impl ProgressStyle {
     }
 }
 
-impl Default for ProgressStyle {
-    fn default() -> Self {
-        ProgressStyle::Block
-    }
-}
 
 impl FromStr for ProgressStyle {
     type Err = ThemeError;
@@ -1269,7 +1260,7 @@ pub fn detect_terminal_background() -> TerminalBackground {
     }
 
     if let Ok(val) = std::env::var("COLORFGBG") {
-        let bg = val.split(';').last().or_else(|| val.split(':').last());
+        let bg = val.split(';').next_back().or_else(|| val.split(':').next_back());
         if let Some(code) = bg.and_then(|v| v.parse::<u8>().ok()) {
             if code == 7 || code == 15 || (248..=255).contains(&code) {
                 return TerminalBackground::Light;

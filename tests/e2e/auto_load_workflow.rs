@@ -597,9 +597,8 @@ fn test_auto_load_dry_run() -> Result<()> {
     let json = output.json();
 
     // Verify dry_run flag is true
-    assert_eq!(
+    assert!(
         json["dry_run"].as_bool().unwrap_or(false),
-        true,
         "dry_run flag should be true"
     );
 
@@ -759,11 +758,11 @@ fn test_auto_load_multi_language() -> Result<()> {
     if let Some(types) = project_types {
         let type_names: Vec<&str> = types.iter().filter_map(|t| t["type"].as_str()).collect();
         assert!(
-            type_names.iter().any(|t| *t == "rust"),
+            type_names.contains(&"rust"),
             "Context should detect Rust"
         );
         assert!(
-            type_names.iter().any(|t| *t == "python"),
+            type_names.contains(&"python"),
             "Context should detect Python"
         );
     }

@@ -651,7 +651,7 @@ mod tests {
             skill.quality_score,
             "",
         );
-        let rendered = format!("{panel}");
+        let rendered = panel.to_string();
         assert!(
             rendered.contains("test-skill"),
             "panel should contain skill name"
@@ -870,7 +870,7 @@ mod tests {
         skill.deprecation_reason = Some("Use v2 instead".to_string());
 
         let warn = warning_panel("DEPRECATED", skill.deprecation_reason.as_deref().unwrap());
-        let rendered = format!("{warn}");
+        let rendered = warn.to_string();
         assert!(!rendered.is_empty(), "warning panel should render");
     }
 

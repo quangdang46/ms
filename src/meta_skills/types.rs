@@ -430,7 +430,7 @@ mod tests {
     #[test]
     fn disclosure_level_clone() {
         let level = MetaDisclosureLevel::Extended;
-        let cloned = level.clone();
+        let cloned = level;
         assert_eq!(cloned, MetaDisclosureLevel::Extended);
     }
 

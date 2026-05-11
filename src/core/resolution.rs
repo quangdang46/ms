@@ -568,7 +568,7 @@ fn apply_include(target: &mut SkillSpec, source: &SkillSpec, include: &SkillIncl
         match include.position {
             IncludePosition::Prepend => {
                 let mut new_blocks = source_blocks;
-                new_blocks.extend(section.blocks.drain(..));
+                new_blocks.append(&mut section.blocks);
                 section.blocks = new_blocks;
             }
             IncludePosition::Append => {

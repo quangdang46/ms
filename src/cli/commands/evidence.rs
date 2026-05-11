@@ -627,10 +627,8 @@ mod tests {
 
     #[test]
     fn test_evidence_render_timeline() {
-        let refs = vec![
-            make_evidence_ref("sess-001", 0.8),
-            make_evidence_ref("sess-002", 0.9),
-        ];
+        let refs = [make_evidence_ref("sess-001", 0.8),
+            make_evidence_ref("sess-002", 0.9)];
         // Timeline ordering by session
         assert!(refs[0].session_id < refs[1].session_id);
     }
@@ -654,10 +652,8 @@ mod tests {
 
     #[test]
     fn test_evidence_render_summary() {
-        let records = vec![
-            make_evidence_record("skill-a", "rule-1"),
-            make_evidence_record("skill-a", "rule-2"),
-        ];
+        let records = [make_evidence_record("skill-a", "rule-1"),
+            make_evidence_record("skill-a", "rule-2")];
         assert_eq!(records.len(), 2);
         let total_refs: usize = records.iter().map(|r| r.evidence.len()).sum();
         assert_eq!(total_refs, 2);
@@ -677,7 +673,7 @@ mod tests {
 
     #[test]
     fn test_evidence_json_output_format() {
-        let records = vec![make_evidence_record("skill-a", "rule-1")];
+        let records = [make_evidence_record("skill-a", "rule-1")];
         let output = serde_json::json!({
             "status": "ok",
             "count": records.len(),
@@ -710,10 +706,8 @@ mod tests {
 
     #[test]
     fn test_evidence_timeline_ordering() {
-        let mut records = vec![
-            make_evidence_record("skill-b", "rule-1"),
-            make_evidence_record("skill-a", "rule-1"),
-        ];
+        let mut records = [make_evidence_record("skill-b", "rule-1"),
+            make_evidence_record("skill-a", "rule-1")];
         records.sort_by(|a, b| a.skill_id.cmp(&b.skill_id));
         assert_eq!(records[0].skill_id, "skill-a");
         assert_eq!(records[1].skill_id, "skill-b");

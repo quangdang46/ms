@@ -27,7 +27,9 @@ impl CanonicalId {
         let p = sanitize_segment(provider);
         let n = sanitize_segment(name);
         if p.is_empty() || n.is_empty() {
-            return Err(MsError::InvalidSkill("provider and name must be non-empty".to_string()));
+            return Err(MsError::InvalidSkill(
+                "provider and name must be non-empty".to_string(),
+            ));
         }
         let raw = format!("{}/{}", p, n);
         Ok(Self {
@@ -44,7 +46,9 @@ impl CanonicalId {
     pub fn parse(raw: &str) -> Result<Self> {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
-            return Err(MsError::InvalidSkill("canonical id cannot be empty".to_string()));
+            return Err(MsError::InvalidSkill(
+                "canonical id cannot be empty".to_string(),
+            ));
         }
         if let Some((p, n)) = trimmed.split_once('/') {
             Self::new(p, n)

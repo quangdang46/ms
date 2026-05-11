@@ -82,7 +82,7 @@ const SKILL_DISCOVERY_SKIP_DIRS: &[&str] = &[
 ];
 
 fn is_skipped_skill_discovery_dir(name: &str) -> bool {
-    SKILL_DISCOVERY_SKIP_DIRS.iter().any(|skip| *skip == name)
+    SKILL_DISCOVERY_SKIP_DIRS.contains(&name)
 }
 
 pub fn run(ctx: &AppContext, args: &IndexArgs) -> Result<()> {

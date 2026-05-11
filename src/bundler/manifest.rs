@@ -640,7 +640,10 @@ checksum = "sha256:abc123"
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "TODO(0.2.x): manifest path-validation error message differs on Windows; preexisting on v0.1.0")]
+    #[cfg_attr(
+        windows,
+        ignore = "TODO(0.2.x): manifest path-validation error message differs on Windows; preexisting on v0.1.0"
+    )]
     fn validate_rejects_unsafe_paths() {
         let mut manifest = BundleManifest::from_toml_str(SAMPLE_TOML).unwrap();
 

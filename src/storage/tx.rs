@@ -929,7 +929,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "TODO(0.2.x): Windows file locking semantics differ (os error 33); preexisting on v0.1.0")]
+    #[cfg_attr(
+        windows,
+        ignore = "TODO(0.2.x): Windows file locking semantics differ (os error 33); preexisting on v0.1.0"
+    )]
     fn test_lock_acquisition_and_release() {
         let dir = tempdir().unwrap();
         let ms_root = dir.path().to_path_buf();
@@ -950,7 +953,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "TODO(0.2.x): Windows file locking semantics differ (os error 33); preexisting on v0.1.0")]
+    #[cfg_attr(
+        windows,
+        ignore = "TODO(0.2.x): Windows file locking semantics differ (os error 33); preexisting on v0.1.0"
+    )]
     fn test_lock_timeout() {
         let dir = tempdir().unwrap();
         let ms_root = dir.path().to_path_buf();
@@ -969,7 +975,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "TODO(0.2.x): Windows file locking semantics differ (os error 33); preexisting on v0.1.0")]
+    #[cfg_attr(
+        windows,
+        ignore = "TODO(0.2.x): Windows file locking semantics differ (os error 33); preexisting on v0.1.0"
+    )]
     fn test_lock_status_and_break() {
         let dir = tempdir().unwrap();
         let ms_root = dir.path().to_path_buf();
@@ -1060,7 +1069,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "TODO(0.2.x): Windows file locking semantics differ (os error 33); preexisting on v0.1.0")]
+    #[cfg_attr(
+        windows,
+        ignore = "TODO(0.2.x): Windows file locking semantics differ (os error 33); preexisting on v0.1.0"
+    )]
     fn test_is_locked() {
         let dir = tempdir().unwrap();
         let ms_root = dir.path().to_path_buf();
@@ -1082,7 +1094,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "TODO(0.2.x): Windows file locking semantics differ (os error 33); preexisting on v0.1.0")]
+    #[cfg_attr(
+        windows,
+        ignore = "TODO(0.2.x): Windows file locking semantics differ (os error 33); preexisting on v0.1.0"
+    )]
     fn test_break_lock_refuses_held_lock() {
         let dir = tempdir().unwrap();
         let ms_root = dir.path().to_path_buf();

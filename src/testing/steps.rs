@@ -873,7 +873,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "TODO(0.2.x): shell invocation differs on Windows; preexisting on v0.1.0")]
+    #[cfg_attr(
+        windows,
+        ignore = "TODO(0.2.x): shell invocation differs on Windows; preexisting on v0.1.0"
+    )]
     fn test_execute_run_with_env() {
         let mut ctx = TestContext::default();
         let mut env = HashMap::new();

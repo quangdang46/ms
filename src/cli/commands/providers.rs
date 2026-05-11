@@ -1045,10 +1045,43 @@ mod tests {
     #[test]
     fn test_collect_managed_provider_roots_ignores_never_seen_missing_roots() {
         let temp = TempDir::new().unwrap();
-        let config = SkillPathsConfig::default();
+
+        // Use an empty config so no home-dir roots are added via config paths.
+        // Known provider roots (PROVIDER_ROOTS) may still resolve to real
+        // directories on the developer machine, so we only assert that none
+        // of the roots point into our temp directory.
+        let config = SkillPathsConfig {
+            global: vec![
+                temp.path()
+                    .join("nonexistent-global")
+                    .to_string_lossy()
+                    .to_string(),
+            ],
+            project: vec![
+                temp.path()
+                    .join("nonexistent-project")
+                    .to_string_lossy()
+                    .to_string(),
+            ],
+            community: vec![
+                temp.path()
+                    .join("nonexistent-community")
+                    .to_string_lossy()
+                    .to_string(),
+            ],
+            local: vec![],
+        };
 
         let roots = collect_managed_provider_roots(temp.path(), &config);
-        assert!(roots.is_empty());
+        let temp_roots: Vec<_> = roots
+            .iter()
+            .filter(|(root, _)| root.starts_with(temp.path()))
+            .collect();
+        assert!(
+            temp_roots.is_empty(),
+            "No roots under temp dir should be included, found: {:?}",
+            temp_roots
+        );
     }
 
     #[test]

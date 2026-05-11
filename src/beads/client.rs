@@ -221,8 +221,22 @@ impl BeadsClient {
         }
 
         let output = self.run_command(&args)?;
-        let issues: Vec<Issue> = serde_json::from_slice(&output)
-            .map_err(|e| MsError::BeadsUnavailable(format!("failed to parse list output: {e}")))?;
+        // br list --json may return either a bare array (older versions) or
+        // an object like {"issues": [...], "total": N, ...} (newer versions).
+        let issues: Vec<Issue> = if output.first() == Some(&b'[') {
+            serde_json::from_slice(&output).map_err(|e| {
+                MsError::BeadsUnavailable(format!("failed to parse list output: {e}"))
+            })?
+        } else {
+            #[derive(serde::Deserialize)]
+            struct ListResponse {
+                issues: Vec<Issue>,
+            }
+            let resp: ListResponse = serde_json::from_slice(&output).map_err(|e| {
+                MsError::BeadsUnavailable(format!("failed to parse list output: {e}"))
+            })?;
+            resp.issues
+        };
         Ok(issues)
     }
 

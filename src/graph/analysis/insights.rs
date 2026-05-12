@@ -152,12 +152,14 @@ fn find_orphans(
     graph: &crate::graph::engine::graph::DiGraph,
     issues: &[crate::graph::types::Issue],
 ) -> Vec<String> {
+    // Orphans = nodes with no incoming edges (no blockers, no dependencies).
+    // With edge direction blocker -> dependent, in_degree == 0 means no one blocks this node.
     let mut orphans: Vec<String> = issues
         .iter()
         .filter(|issue| {
             graph
                 .node_idx(&issue.id)
-                .map(|idx| graph.out_degree(idx) == 0)
+                .map(|idx| graph.in_degree(idx) == 0)
                 .unwrap_or(false)
         })
         .map(|issue| issue.id.clone())

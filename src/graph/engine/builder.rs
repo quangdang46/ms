@@ -5,11 +5,14 @@ use crate::graph::types::Issue;
 
 /// Build a directed graph from issue dependencies.
 ///
-/// Each issue becomes a node. Dependencies (blockers) become edges:
-/// issue -> blocker (meaning "this issue depends on that blocker").
+/// Each issue becomes a node. Dependencies become edges from blocker to dependent:
+/// blocker -> dependent (meaning "this blocker prevents the dependent from starting").
 ///
-/// Edge direction: from issue (dependent) to its blocker.
-/// So if A depends on B, the edge is A -> B.
+/// Edge direction: from blocker to the issue it blocks.
+/// So if A depends on B, the edge is B -> A (B blocks A).
+///
+/// This convention matches the reachability module where `predecessors_slice(node)`
+/// returns node's blockers (things that must be completed first).
 pub fn build_graph(issues: &[Issue]) -> DiGraph {
     let mut graph = DiGraph::with_capacity(issues.len(), issues.len() * 2);
 
@@ -18,12 +21,13 @@ pub fn build_graph(issues: &[Issue]) -> DiGraph {
         graph.add_node(&issue.id);
     }
 
-    // Add edges for dependencies
+    // Add edges from blocker -> dependent
     for issue in issues {
-        if let Some(from_idx) = graph.node_idx(&issue.id) {
+        if let Some(dependent_idx) = graph.node_idx(&issue.id) {
             for dep in &issue.dependencies {
-                if let Some(to_idx) = graph.node_idx(&dep.id) {
-                    graph.add_edge(from_idx, to_idx);
+                if let Some(blocker_idx) = graph.node_idx(&dep.id) {
+                    // blocker -> dependent (blocker blocks dependent)
+                    graph.add_edge(blocker_idx, dependent_idx);
                 }
             }
         }
@@ -86,16 +90,16 @@ mod tests {
         let b = graph.node_idx("b").unwrap();
         let c = graph.node_idx("c").unwrap();
 
-        // a -> b (a depends on b)
-        assert_eq!(graph.out_degree(a), 1);
-        assert!(graph.successors_slice(a).contains(&b));
-
-        // b -> c (b depends on c)
+        // Edge: b -> a (b blocks a, because a depends on b)
         assert_eq!(graph.out_degree(b), 1);
-        assert!(graph.successors_slice(b).contains(&c));
+        assert!(graph.successors_slice(b).contains(&a));
 
-        // c has no dependencies
-        assert_eq!(graph.out_degree(c), 0);
+        // Edge: c -> b (c blocks b, because b depends on c)
+        assert_eq!(graph.out_degree(c), 1);
+        assert!(graph.successors_slice(c).contains(&b));
+
+        // a has nothing blocking it from downstream
+        assert_eq!(graph.out_degree(a), 0);
     }
 
     #[test]
@@ -111,8 +115,19 @@ mod tests {
         assert_eq!(graph.node_count(), 4);
         assert_eq!(graph.edge_count(), 4);
 
-        let top = graph.node_idx("top").unwrap();
-        assert_eq!(graph.out_degree(top), 2);
+        let left = graph.node_idx("left").unwrap();
+        let right = graph.node_idx("right").unwrap();
+        // left -> top and right -> top (both block top)
+        assert!(
+            graph
+                .successors_slice(left)
+                .contains(&graph.node_idx("top").unwrap())
+        );
+        assert!(
+            graph
+                .successors_slice(right)
+                .contains(&graph.node_idx("top").unwrap())
+        );
     }
 
     #[test]

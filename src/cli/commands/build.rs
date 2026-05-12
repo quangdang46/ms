@@ -22,7 +22,6 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 use crate::app::AppContext;
-use crate::beads::{BeadsClient, IssueStatus, UpdateIssueRequest};
 use crate::cass::{
     CassClient, QualityScorer,
     brenner::{BrennerConfig, BrennerWizard, WizardOutput, generate_skill_md, run_interactive},
@@ -373,13 +372,9 @@ pub struct BuildArgs {
     #[arg(long)]
     pub from_cass: Option<String>,
 
-    /// Track build progress against a beads issue
     #[arg(long)]
-    pub bead_id: Option<String>,
 
-    /// Close bead automatically on successful build (default: true)
     #[arg(long, default_value = "true")]
-    pub close_bead_on_success: bool,
 
     /// Interactive guided build using Brenner Method
     #[arg(long)]
@@ -496,208 +491,6 @@ impl CmBuildContext {
     }
 }
 
-// =============================================================================
-// Beads Build Integration
-// =============================================================================
-
-/// Build completion data for beads updates.
-#[derive(Debug, Clone, Serialize)]
-pub struct BuildCompletion {
-    pub duration_secs: f64,
-    pub success: bool,
-    pub tests_passed: Option<u32>,
-    pub tests_failed: Option<u32>,
-    pub tests_skipped: Option<u32>,
-    pub coverage_percent: Option<f64>,
-    pub error_summary: Option<String>,
-}
-
-impl BuildCompletion {
-    #[must_use]
-    pub const fn success(duration_secs: f64) -> Self {
-        Self {
-            duration_secs,
-            success: true,
-            tests_passed: None,
-            tests_failed: None,
-            tests_skipped: None,
-            coverage_percent: None,
-            error_summary: None,
-        }
-    }
-
-    pub fn failure(duration_secs: f64, error: impl Into<String>) -> Self {
-        Self {
-            duration_secs,
-            success: false,
-            tests_passed: None,
-            tests_failed: None,
-            tests_skipped: None,
-            coverage_percent: None,
-            error_summary: Some(error.into()),
-        }
-    }
-
-    /// Format as markdown for bead notes.
-    #[must_use]
-    pub fn to_markdown(&self) -> String {
-        let mut md = String::new();
-
-        if self.success {
-            md.push_str("## Build Succeeded\n\n");
-        } else {
-            md.push_str("## Build Failed\n\n");
-        }
-
-        md.push_str(&format!("**Duration:** {:.1}s\n", self.duration_secs));
-
-        if let (Some(p), Some(f), Some(s)) =
-            (self.tests_passed, self.tests_failed, self.tests_skipped)
-        {
-            md.push_str(&format!("**Tests:** {p} passed, {f} failed, {s} skipped\n"));
-        }
-
-        if let Some(cov) = self.coverage_percent {
-            md.push_str(&format!("**Coverage:** {cov:.1}%\n"));
-        }
-
-        if let Some(err) = &self.error_summary {
-            md.push_str("\n### Error Summary\n```\n");
-            md.push_str(err);
-            if !err.ends_with('\n') {
-                md.push('\n');
-            }
-            md.push_str("```\n");
-        }
-
-        md
-    }
-}
-
-/// Tracks build progress in a beads issue.
-///
-/// When a `bead_id` is provided, this tracker:
-/// - Sets the issue to `in_progress` at build start
-/// - Closes the issue on successful build
-/// - Adds failure notes on build failure (keeps `in_progress`)
-pub struct BeadsTracker {
-    client: BeadsClient,
-    bead_id: String,
-    started_at: Instant,
-    close_on_success: bool,
-}
-
-impl BeadsTracker {
-    /// Create a new tracker for the given bead ID.
-    ///
-    /// Returns None if beads is not available.
-    #[must_use]
-    pub fn new(bead_id: String, close_on_success: bool) -> Option<Self> {
-        let client = BeadsClient::new();
-        if !client.is_available() {
-            eprintln!("Warning: beads (bd) not available, skipping bead tracking");
-            return None;
-        }
-        Some(Self {
-            client,
-            bead_id,
-            started_at: Instant::now(),
-            close_on_success,
-        })
-    }
-
-    /// Mark the bead as `in_progress` at build start.
-    pub fn on_start(&self) -> Result<()> {
-        match self
-            .client
-            .update_status(&self.bead_id, IssueStatus::InProgress)
-        {
-            Ok(_) => {
-                eprintln!("Bead: {} set to in_progress", self.bead_id);
-                Ok(())
-            }
-            Err(e) => {
-                // Non-blocking: log warning but don't fail the build
-                eprintln!("Warning: failed to update bead {}: {}", self.bead_id, e);
-                Ok(())
-            }
-        }
-    }
-
-    /// Close the bead on successful build.
-    pub fn on_success(&self, skill_name: &str) -> Result<()> {
-        let completion = BuildCompletion::success(self.duration_secs());
-        if let Err(e) = self.append_completion_note(&completion) {
-            eprintln!(
-                "Warning: failed to append completion note for {}: {}",
-                self.bead_id, e
-            );
-        }
-
-        if self.close_on_success {
-            match self.client.close(&self.bead_id, None) {
-                Ok(_) => {
-                    eprintln!(
-                        "Bead: {} closed (build successful: {})",
-                        self.bead_id, skill_name
-                    );
-                    Ok(())
-                }
-                Err(e) => {
-                    eprintln!("Warning: failed to close bead {}: {}", self.bead_id, e);
-                    Ok(())
-                }
-            }
-        } else {
-            eprintln!(
-                "Bead: {} build completed (close disabled: {})",
-                self.bead_id, skill_name
-            );
-            Ok(())
-        }
-    }
-
-    /// Add failure note on build failure (keeps `in_progress`).
-    pub fn on_failure(&self, error: &str) -> Result<()> {
-        let completion = BuildCompletion::failure(self.duration_secs(), error);
-        match self.append_completion_note(&completion) {
-            Ok(()) => {
-                eprintln!("Bead: {} updated with failure note", self.bead_id);
-                Ok(())
-            }
-            Err(e) => {
-                eprintln!("Warning: failed to update bead {}: {}", self.bead_id, e);
-                Ok(())
-            }
-        }
-    }
-
-    fn duration_secs(&self) -> f64 {
-        self.started_at.elapsed().as_secs_f64()
-    }
-
-    fn append_completion_note(&self, completion: &BuildCompletion) -> Result<()> {
-        let note = completion.to_markdown();
-        let combined = match self.client.show(&self.bead_id) {
-            Ok(issue) => {
-                if let Some(existing) = issue.notes {
-                    if existing.trim().is_empty() {
-                        note
-                    } else {
-                        format!("{existing}\n\n{note}")
-                    }
-                } else {
-                    note
-                }
-            }
-            Err(_) => note,
-        };
-
-        let req = UpdateIssueRequest::new().with_notes(combined);
-        self.client.update(&self.bead_id, &req)?;
-        Ok(())
-    }
-}
 
 pub fn run(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
     debug!(target: "build", mode = ?ctx.output_format, "output mode selected");
@@ -767,20 +560,11 @@ pub fn run(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
         None
     };
 
-    // Initialize beads tracker if bead_id is provided
-    let bead_tracker = args
-        .bead_id
-        .as_ref()
-        .and_then(|id| BeadsTracker::new(id.clone(), args.close_bead_on_success));
 
-    // Mark bead as in_progress at build start
-    if let Some(ref tracker) = bead_tracker {
-        tracker.on_start()?;
-    }
 
     // Handle resume
     if let Some(ref session_id) = args.resume {
-        return run_resume(ctx, args, session_id, bead_tracker);
+        return run_resume(ctx, args, session_id);
     }
 
     // Handle resolve uncertainties
@@ -790,16 +574,16 @@ pub fn run(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
 
     // Guided mode uses Brenner wizard
     if args.guided {
-        return run_guided(ctx, args, cm_context.as_ref(), bead_tracker);
+        return run_guided(ctx, args, cm_context.as_ref());
     }
 
     // Auto mode
     if args.auto {
-        return run_auto(ctx, args, cm_context.as_ref(), bead_tracker, None);
+        return run_auto(ctx, args, cm_context.as_ref(), None);
     }
 
     // Default: interactive but not guided
-    run_interactive_build(ctx, args, cm_context.as_ref(), bead_tracker)
+    run_interactive_build(ctx, args, cm_context.as_ref())
 }
 
 /// Run guided build using Brenner Method wizard
@@ -807,8 +591,7 @@ fn run_guided(
     ctx: &AppContext,
     args: &BuildArgs,
     cm_context: Option<&CmBuildContext>,
-    tracker: Option<BeadsTracker>,
-) -> Result<()> {
+    ) -> Result<()> {
     let query = args
         .from_cass
         .clone()
@@ -905,9 +688,6 @@ fn run_guided(
             println!("  Manifest: {}", manifest_path.display());
             println!("  Calibration: {}", calibration_path.display());
 
-            if let Some(t) = tracker {
-                t.on_success(&draft.name)?;
-            }
         }
         WizardOutput::Cancelled {
             reason,
@@ -917,9 +697,7 @@ fn run_guided(
             if let Some(id) = checkpoint_id {
                 println!("  Resume with: ms build --resume {id}");
             }
-            if let Some(t) = tracker {
-                t.on_failure(&format!("Cancelled: {reason}"))?;
-            }
+            // beads tracking removed
         }
     }
 
@@ -931,8 +709,7 @@ fn run_auto(
     ctx: &AppContext,
     args: &BuildArgs,
     cm_context: Option<&CmBuildContext>,
-    tracker: Option<BeadsTracker>,
-    query_override: Option<&str>,
+        query_override: Option<&str>,
 ) -> Result<()> {
     use crate::cass::QualityConfig;
     use crate::cass::mining::{ExtractedPattern, extract_from_session};
@@ -1031,9 +808,6 @@ fn run_auto(
 
     // Check for timeout before starting phase
     if session.is_timed_out() {
-        if let Some(t) = &tracker {
-            t.on_failure("Build timed out during session search")?;
-        }
         return output_timeout(ctx, &mut session, &output_dir);
     }
 
@@ -1044,9 +818,6 @@ fn run_auto(
     session.advance_phase(); // -> QualityFilter
 
     if session_matches.is_empty() {
-        if let Some(t) = &tracker {
-            t.on_failure("No matching sessions found")?;
-        }
         return output_no_sessions(ctx, &session, &query);
     }
 
@@ -1071,9 +842,6 @@ fn run_auto(
     }
 
     if session.is_timed_out() {
-        if let Some(t) = &tracker {
-            t.on_failure("Build timed out during quality filtering")?;
-        }
         return output_timeout(ctx, &mut session, &output_dir);
     }
 
@@ -1113,9 +881,6 @@ fn run_auto(
 
         // Check timeout during processing
         if session.is_timed_out() {
-            if let Some(t) = &tracker {
-                t.on_failure("Build timed out during quality filtering loop")?;
-            }
             return output_timeout(ctx, &mut session, &output_dir);
         }
     }
@@ -1124,9 +889,6 @@ fn run_auto(
     session.advance_phase(); // -> ExtractPatterns
 
     if quality_sessions.is_empty() {
-        if let Some(t) = &tracker {
-            t.on_failure("No sessions passed quality threshold")?;
-        }
         return output_no_quality(
             ctx,
             &session,
@@ -1164,9 +926,6 @@ fn run_auto(
     }
 
     if session.is_timed_out() {
-        if let Some(t) = &tracker {
-            t.on_failure("Build timed out during pattern extraction")?;
-        }
         return output_timeout(ctx, &mut session, &output_dir);
     }
 
@@ -1195,9 +954,6 @@ fn run_auto(
         }
 
         if session.is_timed_out() {
-            if let Some(t) = &tracker {
-                t.on_failure("Build timed out during pattern extraction loop")?;
-            }
             return output_timeout(ctx, &mut session, &output_dir);
         }
     }
@@ -1206,9 +962,6 @@ fn run_auto(
     session.advance_phase(); // -> FilterPatterns
 
     if all_patterns.is_empty() {
-        if let Some(t) = &tracker {
-            t.on_failure("No patterns extracted from sessions")?;
-        }
         return output_no_patterns(ctx, &session, &query, quality_sessions.len());
     }
 
@@ -1225,9 +978,6 @@ fn run_auto(
     }
 
     if session.is_timed_out() {
-        if let Some(t) = &tracker {
-            t.on_failure("Build timed out during pattern filtering")?;
-        }
         return output_timeout(ctx, &mut session, &output_dir);
     }
 
@@ -1270,9 +1020,6 @@ fn run_auto(
 
     // Check quality gates before synthesis
     if let Err(gate_error) = session.check_quality_gates() {
-        if let Some(t) = &tracker {
-            t.on_failure(&format!("Quality gate failed: {gate_error}"))?;
-        }
         return output_gate_fail(ctx, &session, &gate_error);
     }
 
@@ -1285,9 +1032,6 @@ fn run_auto(
     }
 
     if session.is_timed_out() {
-        if let Some(t) = &tracker {
-            t.on_failure("Build timed out during synthesis")?;
-        }
         return output_timeout(ctx, &mut session, &output_dir);
     }
 
@@ -1374,9 +1118,7 @@ fn run_auto(
         println!("  Output directory: {}", output_dir.display());
     }
 
-    if let Some(t) = tracker {
-        t.on_success(&format!("Auto build: {query}"))?;
-    }
+    // beads tracking removed
 
     Ok(())
 }
@@ -1516,8 +1258,7 @@ fn run_interactive_build(
     ctx: &AppContext,
     args: &BuildArgs,
     cm_context: Option<&CmBuildContext>,
-    tracker: Option<BeadsTracker>,
-) -> Result<()> {
+    ) -> Result<()> {
     if ctx.output_format != OutputFormat::Human {
         let output = json!({
             "error": true,
@@ -1557,7 +1298,7 @@ fn run_interactive_build(
     }
 
     // Default to guided for interactive use
-    run_guided(ctx, args, cm_context, tracker)
+    run_guided(ctx, args, cm_context)
 }
 
 /// Resume a previous build session
@@ -1565,8 +1306,7 @@ fn run_resume(
     ctx: &AppContext,
     args: &BuildArgs,
     session_id: &str,
-    tracker: Option<BeadsTracker>,
-) -> Result<()> {
+    ) -> Result<()> {
     use crate::core::recovery::Checkpoint;
 
     // Try to load checkpoint
@@ -1687,7 +1427,7 @@ fn run_resume(
 
                 // Resume by restarting with same parameters, using query from checkpoint
                 // (full incremental resume would require more state)
-                return run_auto(ctx, args, cm_context.as_ref(), tracker, Some(query));
+                return run_auto(ctx, args, cm_context.as_ref(), Some(query));
             }
         }
         _ => {
@@ -2563,66 +2303,6 @@ mod tests {
         assert_eq!(restored.patterns_filtered, state.patterns_filtered);
     }
 
-    #[test]
-    fn test_build_completion_markdown_success() {
-        let completion = BuildCompletion {
-            duration_secs: 12.3,
-            success: true,
-            tests_passed: Some(10),
-            tests_failed: Some(1),
-            tests_skipped: Some(2),
-            coverage_percent: Some(87.5),
-            error_summary: None,
-        };
-
-        let md = completion.to_markdown();
-        assert!(md.contains("Build Succeeded"));
-        assert!(md.contains("Duration"));
-        assert!(md.contains("10 passed, 1 failed, 2 skipped"));
-        assert!(md.contains("87.5%"));
-        assert!(!md.contains("Error Summary"));
-    }
-
-    #[test]
-    fn test_build_completion_markdown_failure_includes_error() {
-        let completion = BuildCompletion::failure(4.2, "boom");
-        let md = completion.to_markdown();
-        assert!(md.contains("Build Failed"));
-        assert!(md.contains("Duration"));
-        assert!(md.contains("Error Summary"));
-        assert!(md.contains("boom"));
-    }
-
-    #[test]
-    fn test_build_completion_markdown_partial_data_no_coverage() {
-        // Test that partial data (success with no test counts or coverage) works correctly
-        let completion = BuildCompletion::success(5.5);
-        let md = completion.to_markdown();
-        assert!(md.contains("Build Succeeded"));
-        assert!(md.contains("**Duration:** 5.5s"));
-        // Should NOT contain test or coverage info when not provided
-        assert!(!md.contains("Tests:"));
-        assert!(!md.contains("Coverage:"));
-        assert!(!md.contains("Error Summary"));
-    }
-
-    #[test]
-    fn test_build_completion_markdown_partial_tests_no_coverage() {
-        // Test with test counts but no coverage
-        let completion = BuildCompletion {
-            duration_secs: 8.0,
-            success: true,
-            tests_passed: Some(5),
-            tests_failed: Some(0),
-            tests_skipped: Some(1),
-            coverage_percent: None, // No coverage available
-            error_summary: None,
-        };
-        let md = completion.to_markdown();
-        assert!(md.contains("Build Succeeded"));
-        assert!(md.contains("5 passed, 0 failed, 1 skipped"));
-        assert!(!md.contains("Coverage:"));
-    }
 
     #[test]
     fn test_build_phase_serialization() {
@@ -2768,28 +2448,6 @@ mod tests {
         let error_msg = format!("{} No sessions found matching query: test", "Error:");
         assert!(!error_msg.contains("\x1b["), "no ANSI in plain output");
         assert!(error_msg.starts_with("Error:"));
-    }
-
-    // ── 5. test_build_render_summary_success ─────────────────────────
-
-    #[test]
-    fn test_build_render_summary_success() {
-        let completion = BuildCompletion::success(7.5);
-        let md = completion.to_markdown();
-        assert!(md.contains("Build Succeeded"));
-        assert!(md.contains("7.5s"));
-        assert!(!md.contains("Error Summary"));
-    }
-
-    // ── 6. test_build_render_summary_failure ─────────────────────────
-
-    #[test]
-    fn test_build_render_summary_failure() {
-        let completion = BuildCompletion::failure(3.2, "connection refused");
-        let md = completion.to_markdown();
-        assert!(md.contains("Build Failed"));
-        assert!(md.contains("3.2s"));
-        assert!(md.contains("connection refused"));
     }
 
     // ── 7. test_build_render_cache_status ────────────────────────────

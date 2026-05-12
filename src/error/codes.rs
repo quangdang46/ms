@@ -139,9 +139,7 @@ pub enum ErrorCode {
     CassUnavailable,
     /// E882: CM (CASS Memory) is not available
     CmUnavailable,
-    /// E883: Beads issue tracker is not available
-    BeadsUnavailable,
-    /// E884: Mining operation failed
+    /// E883: Mining operation failed
     MiningFailed,
     /// E885: Import operation failed
     ImportFailed,
@@ -229,10 +227,9 @@ impl ErrorCode {
             // Integration errors (88x)
             Self::CassUnavailable => 881,
             Self::CmUnavailable => 882,
-            Self::BeadsUnavailable => 883,
-            Self::MiningFailed => 884,
-            Self::ImportFailed => 885,
-            Self::AuthenticationFailed => 886,
+            Self::MiningFailed => 883,
+            Self::ImportFailed => 884,
+            Self::AuthenticationFailed => 885,
 
             // Internal errors (9xx)
             Self::InternalError => 901,
@@ -383,9 +380,6 @@ impl ErrorCode {
             Self::CmUnavailable => {
                 "CM (CASS Memory) is not available. Check installation and configuration"
             }
-            Self::BeadsUnavailable => {
-                "Beads is not available. Install with `cargo install beads_viewer`"
-            }
             Self::MiningFailed => {
                 "Session mining failed. Check CASS connection and query parameters"
             }
@@ -453,7 +447,6 @@ impl ErrorCode {
             | Self::TransactionFailed
             | Self::CassUnavailable
             | Self::CmUnavailable
-            | Self::BeadsUnavailable
             | Self::MiningFailed
             | Self::ImportFailed
             | Self::AuthenticationFailed
@@ -541,7 +534,6 @@ impl ErrorCode {
             Self::TwoPhaseCommitFailed,
             Self::CassUnavailable,
             Self::CmUnavailable,
-            Self::BeadsUnavailable,
             Self::MiningFailed,
             Self::ImportFailed,
             Self::InternalError,

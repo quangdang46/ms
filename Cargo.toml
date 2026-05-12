@@ -25,13 +25,6 @@ exclude = [
 name = "ms"
 path = "src/main.rs"
 
-[[bin]]
-name = "test_beads_e2e"
-path = "src/bin/test_beads_e2e.rs"
-test = false
-bench = false
-required-features = ["beads-e2e-bin"]
-
 [dependencies]
 # CLI
 clap = { version = "4.5.60", features = ["derive", "cargo", "env", "unicode", "wrap_help"] }
@@ -135,7 +128,6 @@ httpmock = "0.8.2"
 
 [features]
 default = []
-beads-e2e-bin = []
 
 [[bench]]
 name = "search_perf"

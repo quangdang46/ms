@@ -3,7 +3,6 @@ pub mod agent_mail;
 pub mod antipatterns;
 pub mod app;
 pub mod auth;
-pub mod beads;
 pub mod bundler;
 pub mod cass;
 pub mod cli;

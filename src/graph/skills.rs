@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde_json::Value as JsonValue;
 
-use crate::beads::{Dependency, Issue, IssueStatus, IssueType, Priority};
+use crate::graph::types::{Dependency, Issue, IssueStatus, IssueType, Priority};
 use crate::error::Result;
 use crate::storage::sqlite::SkillRecord;
 

@@ -35,6 +35,12 @@ pub fn run_migrations(conn: &Connection) -> Result<u32> {
             continue;
         }
 
+        // Wrap each migration in an explicit transaction so schema changes
+        // and the user_version bump are atomic. Without this, concurrent
+        // processes can observe a half-migrated database.
+        conn.execute("BEGIN IMMEDIATE;", []).map_err(|err| {
+            MsError::TransactionFailed(format!("migration {target_version} begin failed: {err}"))
+        })?;
         conn.execute_batch(sql).map_err(|err| {
             MsError::TransactionFailed(format!("migration {target_version} failed: {err}"))
         })?;
@@ -44,6 +50,9 @@ pub fn run_migrations(conn: &Connection) -> Result<u32> {
                     "failed to set user_version {target_version}: {err}"
                 ))
             })?;
+        conn.execute("COMMIT;", []).map_err(|err| {
+            MsError::TransactionFailed(format!("migration {target_version} commit failed: {err}"))
+        })?;
     }
 
     Ok(SCHEMA_VERSION)

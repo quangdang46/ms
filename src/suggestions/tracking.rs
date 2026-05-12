@@ -188,7 +188,7 @@ impl SessionTracker {
     pub fn is_skill_loaded(&self, skill_id: &str) -> bool {
         self.loaded_skills
             .get(skill_id)
-            .map_or(false, |s| s.unloaded_at.is_none())
+            .is_some_and(|s| s.unloaded_at.is_none())
     }
 
     /// Get the duration a skill has been loaded (in minutes).
@@ -339,7 +339,7 @@ impl SuggestionTracker {
             if !self
                 .shown_suggestions
                 .get(skill_id)
-                .map_or(false, |r| r.outcome == SuggestionOutcome::Pending)
+                .is_some_and(|r| r.outcome == SuggestionOutcome::Pending)
             {
                 self.shown_suggestions.insert(
                     skill_id.clone(),
@@ -637,7 +637,7 @@ mod tests {
         let all_feedback = collector.end_session();
 
         // Should have feedback for skill-a (loaded) and skill-b (ignored)
-        assert!(all_feedback.len() >= 1);
+        assert!(!all_feedback.is_empty());
     }
 
     #[test]

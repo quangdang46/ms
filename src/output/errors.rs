@@ -217,7 +217,7 @@ impl<'a> ErrorRenderer<'a> {
         // Create panel with red border
         let panel = Panel::from_text(&content)
             .title(title)
-            .border_style(Style::new().color(Color::parse("red").unwrap_or(Color::default())));
+            .border_style(Style::new().color(Color::parse("red").unwrap_or_default()));
 
         eprintln!("{}", panel.render_plain(self.width));
     }
@@ -241,9 +241,9 @@ impl<'a> ErrorRenderer<'a> {
 
             let content = format!("{}\n\nSuggestion: {}", cause.message, cause.suggestion);
 
-            let panel = Panel::from_text(&content).title(title).border_style(
-                Style::new().color(Color::parse("yellow").unwrap_or(Color::default())),
-            );
+            let panel = Panel::from_text(&content)
+                .title(title)
+                .border_style(Style::new().color(Color::parse("yellow").unwrap_or_default()));
 
             eprintln!("{}", panel.render_plain(self.width.saturating_sub(2)));
         }
@@ -377,7 +377,7 @@ impl<'a> ErrorRenderer<'a> {
 
         let panel = Panel::from_text(&content)
             .title(format!("Code ({})", language))
-            .border_style(Style::new().color(Color::parse("dim").unwrap_or(Color::default())));
+            .border_style(Style::new().color(Color::parse("dim").unwrap_or_default()));
 
         eprintln!("{}", panel.render_plain(width));
     }
@@ -474,7 +474,7 @@ impl<'a> WarningRenderer<'a> {
 
         let panel = Panel::from_text(&content)
             .title(title)
-            .border_style(Style::new().color(Color::parse("yellow").unwrap_or(Color::default())));
+            .border_style(Style::new().color(Color::parse("yellow").unwrap_or_default()));
 
         eprintln!("{}", panel.render_plain(self.width));
     }
@@ -502,7 +502,7 @@ impl<'a> WarningRenderer<'a> {
 
         let panel = Panel::from_text(&content)
             .title(full_title)
-            .border_style(Style::new().color(Color::parse("yellow").unwrap_or(Color::default())));
+            .border_style(Style::new().color(Color::parse("yellow").unwrap_or_default()));
 
         eprintln!("{}", panel.render_plain(self.width));
     }
@@ -526,7 +526,7 @@ impl<'a> WarningRenderer<'a> {
 
         let panel = Panel::from_text(&content)
             .title(format!("{} {} Warning(s)", icon, warnings.len()))
-            .border_style(Style::new().color(Color::parse("yellow").unwrap_or(Color::default())));
+            .border_style(Style::new().color(Color::parse("yellow").unwrap_or_default()));
 
         eprintln!("{}", panel.render_plain(self.width));
     }

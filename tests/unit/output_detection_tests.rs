@@ -84,7 +84,7 @@ mod output_environment {
     #[test]
     fn clone_semantics() {
         let env1 = OutputEnvironment::new(true, false, true, false);
-        let env2 = env1.clone();
+        let env2 = env1;
         assert_eq!(env1, env2);
     }
 

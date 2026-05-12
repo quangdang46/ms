@@ -20,7 +20,15 @@ yanked = "warn"
 # yaml-rust is unmaintained but is pulled in transitively via syntect -> rich_rust
 # No upgrade path available until syntect migrates to yaml-rust2
 # gix-date non-utf8 string issue — requires vergen-gix 9.x (major version bump)
-ignore = ["RUSTSEC-2024-0320", "RUSTSEC-2025-0140"]
+# atty unmaintained / potential unaligned read — pulled in transitively, no upgrade path
+# bincode unmaintained — transitive dep with no drop-in replacement yet
+ignore = [
+    "RUSTSEC-2024-0320",
+    "RUSTSEC-2025-0140",
+    "RUSTSEC-2021-0145",
+    "RUSTSEC-2024-0375",
+    "RUSTSEC-2025-0141",
+]
 
 [licenses]
 # Allow these licenses
@@ -48,8 +56,6 @@ multiple-versions = "warn"
 skip = []
 # Skip tree checking for workspace crates
 wildcards = "allow"
-# Allow build dependencies to be duplicated
-allow-build-scripts = ["*"]
 # Highlight exact duplicates
 highlight = "all"
 # Deny specific crates
@@ -57,14 +63,20 @@ deny = [
     # Crates with known security issues or that are unmaintained
 ]
 
+# Build-script checking is opt-in via [bans.build]. We intentionally leave the
+# section unconfigured so that cargo-deny does not flag every crate that ships a
+# build.rs — this project relies on many such crates (rustix, serde, ring, etc.).
+# Re-enable here if/when we want to audit build scripts explicitly.
+
 [sources]
 # Allow crates from these sources
 unknown-registry = "deny"
 unknown-git = "deny"
 # Allow crates.io as a source
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-# Allow these private git repositories
-allow-git = []
+# Allow these git repositories. `tru` (toon_rust) is consumed via git because the
+# crate is not published to crates.io. Pin reviews on each tag/commit bump.
+allow-git = ["https://github.com/Dicklesworthstone/toon_rust"]
 
 [sources.allow-org]
 # Allow crates from these GitHub orgs

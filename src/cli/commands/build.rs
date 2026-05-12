@@ -595,10 +595,7 @@ impl BeadsTracker {
     pub fn new(bead_id: String, close_on_success: bool) -> Option<Self> {
         let client = BeadsClient::new();
         if !client.is_available() {
-            eprintln!(
-                "{} beads (bd) not available, skipping bead tracking",
-                "Warning:"
-            );
+            eprintln!("Warning: beads (bd) not available, skipping bead tracking");
             return None;
         }
         Some(Self {
@@ -616,15 +613,12 @@ impl BeadsTracker {
             .update_status(&self.bead_id, IssueStatus::InProgress)
         {
             Ok(_) => {
-                eprintln!("{} {} set to in_progress", "Bead:", self.bead_id);
+                eprintln!("Bead: {} set to in_progress", self.bead_id);
                 Ok(())
             }
             Err(e) => {
                 // Non-blocking: log warning but don't fail the build
-                eprintln!(
-                    "{} failed to update bead {}: {}",
-                    "Warning:", self.bead_id, e
-                );
+                eprintln!("Warning: failed to update bead {}: {}", self.bead_id, e);
                 Ok(())
             }
         }
@@ -635,8 +629,8 @@ impl BeadsTracker {
         let completion = BuildCompletion::success(self.duration_secs());
         if let Err(e) = self.append_completion_note(&completion) {
             eprintln!(
-                "{} failed to append completion note for {}: {}",
-                "Warning:", self.bead_id, e
+                "Warning: failed to append completion note for {}: {}",
+                self.bead_id, e
             );
         }
 
@@ -644,23 +638,20 @@ impl BeadsTracker {
             match self.client.close(&self.bead_id, None) {
                 Ok(_) => {
                     eprintln!(
-                        "{} {} closed (build successful: {})",
-                        "Bead:", self.bead_id, skill_name
+                        "Bead: {} closed (build successful: {})",
+                        self.bead_id, skill_name
                     );
                     Ok(())
                 }
                 Err(e) => {
-                    eprintln!(
-                        "{} failed to close bead {}: {}",
-                        "Warning:", self.bead_id, e
-                    );
+                    eprintln!("Warning: failed to close bead {}: {}", self.bead_id, e);
                     Ok(())
                 }
             }
         } else {
             eprintln!(
-                "{} {} build completed (close disabled: {})",
-                "Bead:", self.bead_id, skill_name
+                "Bead: {} build completed (close disabled: {})",
+                self.bead_id, skill_name
             );
             Ok(())
         }
@@ -671,14 +662,11 @@ impl BeadsTracker {
         let completion = BuildCompletion::failure(self.duration_secs(), error);
         match self.append_completion_note(&completion) {
             Ok(()) => {
-                eprintln!("{} {} updated with failure note", "Bead:", self.bead_id);
+                eprintln!("Bead: {} updated with failure note", self.bead_id);
                 Ok(())
             }
             Err(e) => {
-                eprintln!(
-                    "{} failed to update bead {}: {}",
-                    "Warning:", self.bead_id, e
-                );
+                eprintln!("Warning: failed to update bead {}: {}", self.bead_id, e);
                 Ok(())
             }
         }
@@ -727,10 +715,7 @@ pub fn run(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
         && !args.guided
         && ctx.output_format == OutputFormat::Human
     {
-        eprintln!(
-            "{} Using --no-redact or --no-injection-filter bypasses safety filters.",
-            "Warning:"
-        );
+        eprintln!("Warning: Using --no-redact or --no-injection-filter bypasses safety filters.");
         eprint!("Continue? [y/N] ");
         io::stdout().flush()?;
         let mut input = String::new();
@@ -754,16 +739,11 @@ pub fn run(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
             Ok(Some(cm_ctx)) => {
                 if ctx.output_format == OutputFormat::Human {
                     if !cm_ctx.seed_rules.is_empty() {
-                        eprintln!(
-                            "{} Loaded {} CM rules as seeds",
-                            "Info:",
-                            cm_ctx.seed_rules.len()
-                        );
+                        eprintln!("Info: Loaded {} CM rules as seeds", cm_ctx.seed_rules.len());
                     }
                     if !cm_ctx.anti_patterns.is_empty() {
                         eprintln!(
-                            "{} Loaded {} anti-patterns for pitfalls",
-                            "Info:",
+                            "Info: Loaded {} anti-patterns for pitfalls",
                             cm_ctx.anti_patterns.len()
                         );
                     }
@@ -772,16 +752,13 @@ pub fn run(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
             }
             Ok(None) => {
                 if ctx.output_format == OutputFormat::Human {
-                    eprintln!(
-                        "{} CM not available, proceeding without CM context",
-                        "Warning:"
-                    );
+                    eprintln!("Warning: CM not available, proceeding without CM context");
                 }
                 None
             }
             Err(e) => {
                 if ctx.output_format == OutputFormat::Human {
-                    eprintln!("{} Failed to fetch CM context: {e}", "Warning:");
+                    eprintln!("Warning: Failed to fetch CM context: {e}");
                 }
                 None
             }
@@ -861,7 +838,7 @@ fn run_guided(
     // Show CM suggestions if available
     if let Some(cm_ctx) = cm_context {
         if !cm_ctx.suggested_queries.is_empty() && ctx.output_format == OutputFormat::Human {
-            eprintln!("\n{} CM suggested CASS queries:", "Tip:");
+            eprintln!("\nTip: CM suggested CASS queries:");
             for q in &cm_ctx.suggested_queries {
                 eprintln!("   - {q}");
             }
@@ -923,7 +900,7 @@ fn run_guided(
             };
             fs::write(&calibration_path, calibration)?;
 
-            println!("\n{} Build complete!", "Success:");
+            println!("\nSuccess: Build complete!");
             println!("  Skill: {}", skill_path.display());
             println!("  Manifest: {}", manifest_path.display());
             println!("  Calibration: {}", calibration_path.display());
@@ -936,7 +913,7 @@ fn run_guided(
             reason,
             checkpoint_id,
         } => {
-            println!("\n{} Build cancelled: {}", "Info:", reason);
+            println!("\nInfo: Build cancelled: {}", reason);
             if let Some(id) = checkpoint_id {
                 println!("  Resume with: ms build --resume {id}");
             }
@@ -1015,7 +992,7 @@ fn run_auto(
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("{}", "Starting automatic build...");
+        println!("Starting automatic build...");
         println!("  Session: {}", session.session_id);
         println!("  Query: {query}");
         println!("  Sessions: {}", args.sessions);
@@ -1049,7 +1026,7 @@ fn run_auto(
     // =========================================================================
     debug!(target: "build", stage = "search_sessions", "stage start");
     if ctx.output_format == OutputFormat::Human {
-        println!("\n{} Searching CASS...", "Phase 1:");
+        println!("\nPhase 1: Searching CASS...");
     }
 
     // Check for timeout before starting phase
@@ -1081,7 +1058,7 @@ fn run_auto(
     if session.should_checkpoint() {
         session.save_checkpoint(&ctx.ms_root)?;
         if ctx.output_format == OutputFormat::Human {
-            println!("  {} Checkpoint saved", "[checkpoint]");
+            println!("  [checkpoint] Checkpoint saved");
         }
     }
 
@@ -1090,7 +1067,7 @@ fn run_auto(
     // =========================================================================
     debug!(target: "build", stage = "quality_filter", "stage start");
     if ctx.output_format == OutputFormat::Human {
-        println!("\n{} Quality filtering...", "Phase 2:");
+        println!("\nPhase 2: Quality filtering...");
     }
 
     if session.is_timed_out() {
@@ -1174,7 +1151,7 @@ fn run_auto(
     if session.should_checkpoint() {
         session.save_checkpoint(&ctx.ms_root)?;
         if ctx.output_format == OutputFormat::Human {
-            println!("  {} Checkpoint saved", "[checkpoint]");
+            println!("  [checkpoint] Checkpoint saved");
         }
     }
 
@@ -1183,7 +1160,7 @@ fn run_auto(
     // =========================================================================
     debug!(target: "build", stage = "extract_patterns", "stage start");
     if ctx.output_format == OutputFormat::Human {
-        println!("\n{} Extracting patterns...", "Phase 3:");
+        println!("\nPhase 3: Extracting patterns...");
     }
 
     if session.is_timed_out() {
@@ -1244,7 +1221,7 @@ fn run_auto(
     // =========================================================================
     debug!(target: "build", stage = "filter_patterns", "stage start");
     if ctx.output_format == OutputFormat::Human {
-        println!("\n{} Filtering by confidence...", "Phase 4:");
+        println!("\nPhase 4: Filtering by confidence...");
     }
 
     if session.is_timed_out() {
@@ -1304,7 +1281,7 @@ fn run_auto(
     // =========================================================================
     debug!(target: "build", stage = "synthesize", "stage start");
     if ctx.output_format == OutputFormat::Human {
-        println!("\n{} Writing outputs...", "Phase 5:");
+        println!("\nPhase 5: Writing outputs...");
     }
 
     if session.is_timed_out() {
@@ -1390,7 +1367,7 @@ fn run_auto(
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("\n{} Auto build complete!", "Success:");
+        println!("\nSuccess: Auto build complete!");
         println!("  Session: {}", session.session_id);
         println!("  Sessions processed: {}", quality_sessions.len());
         println!("  Patterns extracted: {}", filtered_patterns.len());
@@ -1425,10 +1402,7 @@ fn output_timeout(
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!(
-            "\n{} Build timed out at phase: {}",
-            "Timeout:", session.phase
-        );
+        println!("\nTimeout: Build timed out at phase: {}", session.phase);
         println!("  Progress: {:.0}%", session.overall_progress() * 100.0);
         println!("  Checkpoint saved. Resume with:");
         println!("    ms build --resume {}", session.session_id);
@@ -1447,7 +1421,7 @@ fn output_no_sessions(ctx: &AppContext, session: &BuildSession, query: &str) -> 
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("{} No sessions found matching query: {}", "Error:", query);
+        println!("Error: No sessions found matching query: {}", query);
     }
     Ok(())
 }
@@ -1472,8 +1446,7 @@ fn output_no_quality(
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
         println!(
-            "{} No sessions passed quality threshold (min: {:.0}%)",
-            "Error:",
+            "Error: No sessions passed quality threshold (min: {:.0}%)",
             min_quality * 100.0
         );
         if !skipped.is_empty() {
@@ -1503,7 +1476,7 @@ fn output_no_patterns(
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("{} No patterns extracted from sessions", "Error:");
+        println!("Error: No patterns extracted from sessions");
     }
     Ok(())
 }
@@ -1524,7 +1497,7 @@ fn output_gate_fail(ctx: &AppContext, session: &BuildSession, error: &str) -> Re
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("{} Quality gate failed: {}", "Error:", error);
+        println!("Error: Quality gate failed: {}", error);
         println!(
             "  Required: {} sessions, {} patterns",
             session.gates.min_sessions, session.gates.min_patterns
@@ -1555,7 +1528,7 @@ fn run_interactive_build(
         return Ok(());
     }
 
-    println!("{}", "Interactive Build");
+    println!("Interactive Build");
     println!();
 
     if args.from_cass.is_none() {
@@ -1571,7 +1544,7 @@ fn run_interactive_build(
 
         if let Some(cm_ctx) = cm_context {
             if !cm_ctx.suggested_queries.is_empty() {
-                println!("{} CM suggested queries:", "Tip:");
+                println!("Tip: CM suggested queries:");
                 for q in &cm_ctx.suggested_queries {
                     println!("   ms build --guided --from-cass \"{q}\"");
                 }
@@ -1609,10 +1582,7 @@ fn run_resume(
             });
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
-            println!(
-                "{} No checkpoint found for session: {}",
-                "Error:", session_id
-            );
+            println!("Error: No checkpoint found for session: {}", session_id);
             println!("\nTo list available checkpoints:");
             println!("  ls {}/.ms/checkpoints/", ctx.ms_root.display());
         }
@@ -1632,8 +1602,8 @@ fn run_resume(
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
             println!(
-                "{} Checkpoint {} is not from a build operation (type: {})",
-                "Error:", session_id, checkpoint.operation_type
+                "Error: Checkpoint {} is not from a build operation (type: {})",
+                session_id, checkpoint.operation_type
             );
         }
         return Ok(());
@@ -1653,7 +1623,7 @@ fn run_resume(
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("{}", "Resuming build from checkpoint...");
+        println!("Resuming build from checkpoint...");
         println!("  Session: {session_id}");
         println!("  Phase: {}", checkpoint.phase);
         println!("  Progress: {:.0}%", checkpoint.progress * 100.0);
@@ -1690,7 +1660,7 @@ fn run_resume(
                 });
 
             if ctx.output_format == OutputFormat::Human {
-                println!("\n{} Checkpoint indicates Brenner wizard session", "Info:");
+                println!("\nInfo: Checkpoint indicates Brenner wizard session");
                 println!("  Use --guided flag to continue wizard workflow:");
                 println!(
                     "    ms build --guided --from-cass \"{}\" --output {:?}",
@@ -1703,7 +1673,7 @@ fn run_resume(
             // Auto build phases - can resume from checkpoint state
             if let Some(query) = checkpoint.get_state("query") {
                 if ctx.output_format == OutputFormat::Human {
-                    println!("\n{} Auto build checkpoint found", "Info:");
+                    println!("\nInfo: Auto build checkpoint found");
                     println!("  Restarting auto build from beginning...");
                 }
 
@@ -1722,10 +1692,7 @@ fn run_resume(
         }
         _ => {
             if ctx.output_format == OutputFormat::Human {
-                println!(
-                    "\n{} Unknown checkpoint phase: {}",
-                    "Warning:", checkpoint.phase
-                );
+                println!("\nWarning: Unknown checkpoint phase: {}", checkpoint.phase);
                 println!("  This checkpoint may be from an older version.");
             }
         }
@@ -1765,7 +1732,7 @@ fn run_resolve_uncertainties(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
             });
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
-            println!("{}", "Uncertainty Queue Status");
+            println!("Uncertainty Queue Status");
             println!();
             println!("  Pending:     0");
             println!("  In Progress: 0");
@@ -1773,7 +1740,7 @@ fn run_resolve_uncertainties(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
             println!("  Rejected:    {}", counts.rejected);
             println!("  Total:       {}", counts.total());
             println!();
-            println!("{} No pending uncertainties to resolve", "Info:");
+            println!("Info: No pending uncertainties to resolve");
         }
         return Ok(());
     }
@@ -1798,7 +1765,7 @@ fn run_resolve_uncertainties(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else if ctx.output_format == OutputFormat::Human {
-        println!("{}", "Uncertainty Queue Status");
+        println!("Uncertainty Queue Status");
         println!();
         println!(
             "  Pending:     {}{}",
@@ -1811,7 +1778,7 @@ fn run_resolve_uncertainties(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
             counts.needs_human,
             if counts.needs_human > 0 { " 👤" } else { "" }
         );
-        println!("  Resolved:    {} {}", counts.resolved, "[ok]");
+        println!("  Resolved:    {} [ok]", counts.resolved);
         println!("  Rejected:    {}", counts.rejected);
         println!("  Expired:     {}", counts.expired);
         println!("  ──────────────────");
@@ -1826,7 +1793,7 @@ fn run_resolve_uncertainties(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
         .collect();
 
     if ctx.output_format == OutputFormat::Human && !pending_items.is_empty() {
-        println!("{}", "Pending Uncertainties:");
+        println!("Pending Uncertainties:");
         for (i, item) in pending_items.iter().take(10).enumerate() {
             let reason_str = format_uncertainty_reason(&item.reason);
             let description = item
@@ -1853,7 +1820,7 @@ fn run_resolve_uncertainties(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
     // Auto-resolution flow
     if args.auto && !pending_items.is_empty() {
         if ctx.output_format == OutputFormat::Human {
-            println!("\n{} Running auto-resolution...", "Step:");
+            println!("\nStep: Running auto-resolution...");
         }
 
         let resolver = DefaultResolver::new(args.min_confidence, 5);
@@ -1926,8 +1893,7 @@ fn run_resolve_uncertainties(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
                     resolved_count += 1;
                     if ctx.output_format == OutputFormat::Human {
                         println!(
-                            "  {} Resolved: {}",
-                            "[ok]",
+                            "  [ok] Resolved: {}",
                             item.pattern_candidate
                                 .description
                                 .as_deref()
@@ -1939,8 +1905,7 @@ fn run_resolve_uncertainties(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
                     // Keep in pending state for next round
                     if ctx.output_format == OutputFormat::Human {
                         println!(
-                            "  {} Needs more evidence: {}",
-                            "[pending]",
+                            "  [pending] Needs more evidence: {}",
                             item.pattern_candidate
                                 .description
                                 .as_deref()
@@ -1956,8 +1921,7 @@ fn run_resolve_uncertainties(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
                     escalated_count += 1;
                     if ctx.output_format == OutputFormat::Human {
                         println!(
-                            "  {} Escalated: {} - {}",
-                            "[human]",
+                            "  [human] Escalated: {} - {}",
                             item.pattern_candidate
                                 .description
                                 .as_deref()
@@ -1974,8 +1938,7 @@ fn run_resolve_uncertainties(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
                     rejected_count += 1;
                     if ctx.output_format == OutputFormat::Human {
                         println!(
-                            "  {} Rejected: {} - {}",
-                            "[fail]",
+                            "  [fail] Rejected: {} - {}",
                             item.pattern_candidate
                                 .description
                                 .as_deref()
@@ -2027,7 +1990,7 @@ fn run_resolve_uncertainties(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
             println!();
-            println!("{} Resolution complete", "Done:");
+            println!("Done: Resolution complete");
             println!("  Resolved:  {resolved_count}");
             println!("  Escalated: {escalated_count}");
             println!("  Rejected:  {rejected_count}");
@@ -2051,12 +2014,12 @@ fn run_resolve_uncertainties(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
             });
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
-            println!("{} No pending items to auto-resolve", "Info:");
+            println!("Info: No pending items to auto-resolve");
             println!("  {} items are in-progress", counts.in_progress);
         }
     } else if ctx.output_format == OutputFormat::Human {
         // Interactive mode hint (non-auto, non-robot)
-        println!("{}", "Options:");
+        println!("Options:");
         println!("  Run with --auto to attempt automatic resolution");
         println!("  Use: ms uncertainties resolve <id> for manual resolution");
     }

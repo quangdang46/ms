@@ -1211,6 +1211,10 @@ mod enhancement_tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "TODO(0.2.x): TempDir cleanup races with file-handle release on Windows; preexisting on v0.1.0"
+    )]
     fn test_verify_cleanup_drops_cloned_fixture_root() {
         let fixture = TestFixture::with_sample_skills("verify_cleanup_drops_clone");
         fixture.verify_cleanup().expect("cleanup verification");

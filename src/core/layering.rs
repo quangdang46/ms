@@ -431,7 +431,7 @@ impl LayeredRegistry {
         };
 
         let mut sorted = overlays.clone();
-        sorted.sort_by(|a, b| a.priority.cmp(&b.priority));
+        sorted.sort_by_key(|a| a.priority);
 
         let mut results = Vec::new();
         for overlay in &sorted {

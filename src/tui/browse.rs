@@ -599,20 +599,18 @@ impl BrowseTui {
             KeyCode::Up | KeyCode::Char('k') => {
                 self.select_prev();
             }
-            KeyCode::Char('G') => {
+            KeyCode::Char('G')
                 // Jump to last
-                if !self.filtered.is_empty() {
+                if !self.filtered.is_empty() => {
                     self.list_state.select(Some(self.filtered.len() - 1));
                     self.detail_scroll = 0;
                 }
-            }
-            KeyCode::Char('g') => {
+            KeyCode::Char('g')
                 // Jump to first
-                if !self.filtered.is_empty() {
+                if !self.filtered.is_empty() => {
                     self.list_state.select(Some(0));
                     self.detail_scroll = 0;
                 }
-            }
             KeyCode::Enter | KeyCode::Char('l') => {
                 return self.load_selected();
             }

@@ -203,7 +203,7 @@ fn test_imported_scripts_survive_deletion() -> Result<()> {
     let mut fixture = E2EFixture::new("import_scripts_survive");
 
     let skill_dir = fixture.root.join(".codex/skills/scripted-skill");
-    fs::create_dir_all(&skill_dir.join("scripts"))?;
+    fs::create_dir_all(skill_dir.join("scripts"))?;
     fs::write(
         skill_dir.join("SKILL.md"),
         "# Scripted Skill\n\n## Rules\n\n- Run the setup script first\n",
@@ -386,7 +386,7 @@ Here are some code examples.
 
     // At least one slug should be present for a multi-section skill
     assert!(
-        slugs.len() >= 1,
+        !slugs.is_empty(),
         "skill should have at least one section slug, got {:?}",
         slugs
     );

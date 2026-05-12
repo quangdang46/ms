@@ -17,8 +17,9 @@
 //!
 //! # Example
 //!
-//! ```rust,no_run
-//! use meta_skill::agent_detection::{AgentDetectionService, AgentType};
+//! ```ignore
+//! // TODO(0.2.x): crate is published as `ms`; update doctest when API stabilizes.
+//! use ms::agent_detection::AgentDetectionService;
 //!
 //! let service = AgentDetectionService::new();
 //! let agents = service.detect_all();

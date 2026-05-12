@@ -461,8 +461,7 @@ impl SkillGenerator {
         if skill.metadata.description.is_empty() {
             skill.metadata.description = blocks
                 .iter()
-                .filter(|b| b.block_type == ContentBlockType::Context)
-                .next()
+                .find(|b| b.block_type == ContentBlockType::Context)
                 .map(|b| {
                     let preview: String = b.content.chars().take(200).collect();
                     if b.content.len() > 200 {

@@ -147,7 +147,7 @@ mod tests {
         run_migrations(&conn).unwrap();
 
         // Set version to latest (it should already be, but explicitly confirm)
-        conn.pragma_update(None, "user_version", &SCHEMA_VERSION)
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)
             .unwrap();
 
         // Running again should be a no-op

@@ -187,7 +187,7 @@ fn test_wal_integrity_during_operations() {
 
     // Run a series of operations
     for i in 0..5 {
-        let req = CreateIssueRequest::new(&format!("WAL Test {}", i));
+        let req = CreateIssueRequest::new(format!("WAL Test {}", i));
         let issue = match client.create(&req) {
             Ok(issue) => issue,
             Err(e) => {
@@ -326,7 +326,7 @@ fn test_sync_persistence() {
     // Create some issues
     let mut created_count = 0;
     for i in 0..3 {
-        let req = CreateIssueRequest::new(&format!("Sync Test {}", i));
+        let req = CreateIssueRequest::new(format!("Sync Test {}", i));
         if client.create(&req).is_ok() {
             created_count += 1;
         }
@@ -466,7 +466,7 @@ fn test_wal_files_not_deleted_during_operations() {
     // Create issues to trigger WAL activity
     let mut created = 0;
     for i in 0..3 {
-        let req = CreateIssueRequest::new(&format!("WAL Preserve Test {}", i));
+        let req = CreateIssueRequest::new(format!("WAL Preserve Test {}", i));
         if client.create(&req).is_ok() {
             created += 1;
         }
@@ -537,7 +537,7 @@ fn test_rapid_create_operations() {
     let start = std::time::Instant::now();
 
     for i in 0..20 {
-        let req = CreateIssueRequest::new(&format!("Rapid {}", i));
+        let req = CreateIssueRequest::new(format!("Rapid {}", i));
         match client.create(&req) {
             Ok(issue) => created_ids.push(issue.id),
             Err(e) => {

@@ -268,7 +268,7 @@ fn test_real_beads_list_and_ready() {
     // Create multiple issues
     let mut created_ids = Vec::new();
     for i in 0..5 {
-        let req = CreateIssueRequest::new(&format!("List Test {}", i));
+        let req = CreateIssueRequest::new(format!("List Test {}", i));
         if let Ok(issue) = client.create(&req) {
             created_ids.push(issue.id);
         }
@@ -467,7 +467,7 @@ fn test_real_beads_concurrent_writes_no_corruption() {
 
                 let mut successes = 0;
                 for j in 0..5 {
-                    let req = CreateIssueRequest::new(&format!("Concurrent {} - {}", thread_id, j));
+                    let req = CreateIssueRequest::new(format!("Concurrent {} - {}", thread_id, j));
                     match client.create(&req) {
                         Ok(_) => successes += 1,
                         Err(e) => {
@@ -494,7 +494,7 @@ fn test_real_beads_concurrent_writes_no_corruption() {
     let result = client.list(&WorkFilter::default());
     match result {
         Ok(issues) => {
-            assert!(issues.len() > 0, "Should have some issues after writes");
+            assert!(!issues.is_empty(), "Should have some issues after writes");
         }
         Err(e) => {
             let err_str = e.to_string().to_lowercase();
@@ -528,7 +528,7 @@ fn test_real_beads_interleaved_read_write() {
             .with_env("BEADS_DB", write_db.to_string_lossy());
 
         for i in 0..10 {
-            let req = CreateIssueRequest::new(&format!("Interleaved {}", i));
+            let req = CreateIssueRequest::new(format!("Interleaved {}", i));
             let _ = client.create(&req);
             thread::sleep(Duration::from_millis(20));
         }
@@ -586,7 +586,7 @@ fn test_real_beads_wal_integrity() {
 
     // Run operations that trigger WAL activity
     for i in 0..5 {
-        let req = CreateIssueRequest::new(&format!("WAL Test {}", i));
+        let req = CreateIssueRequest::new(format!("WAL Test {}", i));
         if let Ok(issue) = client.create(&req) {
             let _ = client.update_status(&issue.id, IssueStatus::InProgress);
         }
@@ -621,7 +621,7 @@ fn test_real_beads_rapid_creates() {
     // Rapid fire creation
     let mut created_ids = Vec::new();
     for i in 0..20 {
-        let req = CreateIssueRequest::new(&format!("Rapid {}", i));
+        let req = CreateIssueRequest::new(format!("Rapid {}", i));
         if let Ok(issue) = client.create(&req) {
             created_ids.push(issue.id);
         }
@@ -650,7 +650,7 @@ fn test_real_beads_sync_persistence() {
 
     // Create issues
     for i in 0..3 {
-        let req = CreateIssueRequest::new(&format!("Sync Test {}", i));
+        let req = CreateIssueRequest::new(format!("Sync Test {}", i));
         let _ = client.create(&req);
     }
 

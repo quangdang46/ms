@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::core::ids::{CollisionReport, detect_collisions, is_unambiguous};
+use crate::core::ids::{CollisionReport, detect_collisions};
 use crate::core::skill::{
     BlockType, ReferenceFile, ScriptFile, SkillAssets, SkillProvenance, SkillSpec,
 };
@@ -251,7 +251,7 @@ impl Default for ProviderDiscovery {
 /// Import discovered skills into the .ms archive, database, and search index.
 ///
 /// For each discovered skill:
-/// 1. Write the SkillSpec to the Git archive (skills/by-id/<id>/)
+/// 1. Write the SkillSpec to the Git archive (`skills/by-id/<id>/`)
 /// 2. Upsert a SkillRecord into the SQLite database
 /// 3. Index the skill body in the search index
 pub fn import_discovered_skills(
@@ -321,7 +321,7 @@ pub fn import_discovered_skills(
 fn import_single_skill(
     skill: &DiscoveredSkill,
     same_provider_ids: &HashSet<String>,
-    collision_report: &CollisionReport,
+    _collision_report: &CollisionReport,
     archive: &GitArchive,
     db: &Database,
     search: &SearchIndex,
@@ -335,8 +335,7 @@ fn import_single_skill(
     archived_spec.metadata.provider = skill.provider.clone();
     let canonical = crate::core::ids::CanonicalId::new(&skill.provider, &skill_id)?;
     archived_spec.metadata.canonical_id = canonical.to_canonical_string();
-    archived_spec.metadata.display_id =
-        canonical.display();
+    archived_spec.metadata.display_id = canonical.display();
     canonicalize_provider_references(&mut archived_spec, same_provider_ids);
     archived_spec.archive_format_version = Some(SkillSpec::ARCHIVE_FORMAT_VERSION.to_string());
     archived_spec.provenance = Some(SkillProvenance {

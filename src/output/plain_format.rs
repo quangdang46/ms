@@ -738,7 +738,7 @@ pub mod utils {
     /// Escape a string for TSV output (replace tabs and newlines).
     #[must_use]
     pub fn escape_tsv(s: &str) -> String {
-        s.replace('\t', " ").replace('\n', " ").replace('\r', "")
+        s.replace(['\t', '\n'], " ").replace('\r', "")
     }
 
     /// Format a score as a decimal with consistent precision.

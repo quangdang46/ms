@@ -221,8 +221,22 @@ impl BeadsClient {
         }
 
         let output = self.run_command(&args)?;
-        let issues: Vec<Issue> = serde_json::from_slice(&output)
-            .map_err(|e| MsError::BeadsUnavailable(format!("failed to parse list output: {e}")))?;
+        // br list --json may return either a bare array (older versions) or
+        // an object like {"issues": [...], "total": N, ...} (newer versions).
+        let issues: Vec<Issue> = if output.first() == Some(&b'[') {
+            serde_json::from_slice(&output).map_err(|e| {
+                MsError::BeadsUnavailable(format!("failed to parse list output: {e}"))
+            })?
+        } else {
+            #[derive(serde::Deserialize)]
+            struct ListResponse {
+                issues: Vec<Issue>,
+            }
+            let resp: ListResponse = serde_json::from_slice(&output).map_err(|e| {
+                MsError::BeadsUnavailable(format!("failed to parse list output: {e}"))
+            })?;
+            resp.issues
+        };
         Ok(issues)
     }
 
@@ -956,7 +970,7 @@ mod integration_tests {
             ("Bug 2", IssueType::Bug),
         ] {
             let issue = client
-                .create(&CreateIssueRequest::new(title).with_type(issue_type.clone()))
+                .create(&CreateIssueRequest::new(title).with_type(issue_type))
                 .expect("Create should succeed");
             created_ids.push(issue.id);
             env.log().debug(
@@ -1152,7 +1166,7 @@ mod integration_tests {
         // Create baseline data
         for i in 0..10 {
             client
-                .create(&CreateIssueRequest::new(&format!("Perf Test {}", i)))
+                .create(&CreateIssueRequest::new(format!("Perf Test {}", i)))
                 .expect("Create should succeed");
         }
 

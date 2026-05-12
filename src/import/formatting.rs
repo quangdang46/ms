@@ -228,10 +228,9 @@ pub fn detect_language(code: &str) -> Option<String> {
     // YAML indicators
     if code.lines().all(|l| {
         l.trim().is_empty() || l.contains(": ") || l.starts_with('-') || l.starts_with('#')
-    }) {
-        if code.contains(": ") {
-            return Some("yaml".to_string());
-        }
+    }) && code.contains(": ")
+    {
+        return Some("yaml".to_string());
     }
 
     // JSON indicators
@@ -257,7 +256,7 @@ pub struct ChecklistItem {
     pub checked: bool,
 }
 
-/// Checkbox pattern: "- [ ] item" or "- [x] item"
+/// Checkbox pattern: `"- [ ] item"` or `"- [x] item"`
 static CHECKBOX_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*[-*]?\s*\[([ xX])\]\s*(.*)$").unwrap());
 

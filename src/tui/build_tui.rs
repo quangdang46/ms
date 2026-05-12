@@ -573,12 +573,11 @@ impl BuildTui {
                     }
                 }
             }
-            KeyCode::Char('n') => {
+            KeyCode::Char('n')
                 // Next session
-                if !self.wizard.next_session() {
+                if !self.wizard.next_session() => {
                     self.status_message = Some("No more sessions".to_string());
                 }
-            }
             KeyCode::Char('f') => {
                 // Finish extraction
                 if let Err(e) = self.wizard.finish_extraction() {

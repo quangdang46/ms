@@ -503,7 +503,7 @@ fn format_route_tsv(response: &RouteResponse) -> String {
 }
 
 fn tsv_sanitize(value: &str) -> String {
-    value.replace('\t', " ").replace('\n', " ")
+    value.replace(['\t', '\n'], " ")
 }
 
 // =============================================================================
@@ -726,9 +726,7 @@ fn score_skill(
         .collect();
     let desc_overlap = task_words
         .iter()
-        .filter(|w| {
-            desc_words.contains(w) || desc_words.iter().any(|dw| prefix_fuzzy_match(w, dw))
-        })
+        .filter(|w| desc_words.contains(w) || desc_words.iter().any(|dw| prefix_fuzzy_match(w, dw)))
         .count();
     let description_score = if desc_words.is_empty() {
         0.0
@@ -1347,7 +1345,7 @@ mod tests {
         let skill = make_skill_record("test-skill", "Test", "A test skill", vec!["test"]);
         let response = route_task(vec![skill], "test", 3, 0.0, false);
         assert_eq!(response.decision, "match");
-        assert!(response.candidates.len() >= 1);
+        assert!(!response.candidates.is_empty());
     }
 
     #[test]

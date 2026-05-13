@@ -12,6 +12,7 @@ mod doctor_workflow;
 mod experiment_workflow;
 mod fixture;
 mod fresh_install;
+mod graph_native_workflow;
 mod graph_workflow;
 mod import_workflow;
 mod index_workflow;

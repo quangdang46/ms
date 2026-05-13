@@ -69,7 +69,7 @@ impl AnalysisEngine {
             let pr = pagerank::pagerank(&graph, &pr_config);
 
             let bw = if n > 500 {
-                betweenness::betweenness_approx(&graph, 100, None)
+                betweenness::betweenness_approx(&graph, 100, Some(42))
             } else {
                 betweenness::betweenness(&graph)
             };

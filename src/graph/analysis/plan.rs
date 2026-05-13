@@ -88,12 +88,14 @@ impl AnalysisEngine {
         let closed = self.closed_set();
         let mut unblocks = Vec::new();
 
-        for &dep_idx in graph.predecessors_slice(blocker_idx) {
+        // Iterate issue_id's dependents (successors under blocker→dependent convention)
+        for &dep_idx in graph.successors_slice(blocker_idx) {
             if closed.get(dep_idx).copied().unwrap_or(false) {
                 continue;
             }
             if let Some(dep_id) = graph.node_id(dep_idx) {
-                let all_closed: bool = graph.successors_slice(dep_idx).iter().all(|&blocker| {
+                // Check if all of this dependent's blockers are closed
+                let all_closed: bool = graph.predecessors_slice(dep_idx).iter().all(|&blocker| {
                     if blocker == blocker_idx {
                         return true;
                     }
@@ -341,5 +343,59 @@ mod tests {
         assert_eq!(generate_track_id(2), "track-B");
         assert_eq!(generate_track_id(26), "track-Z");
         assert_eq!(generate_track_id(27), "track-AA");
+    }
+
+    #[test]
+    fn test_compute_unblocks_chain() {
+        // a (closed) -> b (open, deps=[a]) -> c (open, deps=[b])
+        // Closing b should unblock c
+        let issues = vec![
+            make_issue("a", IssueStatus::Closed, vec![]),
+            make_issue("b", IssueStatus::Open, vec!["a"]),
+            make_issue("c", IssueStatus::Open, vec!["b"]),
+        ];
+        let engine = AnalysisEngine::new(&issues);
+        let unblocks = engine.compute_unblocks("b");
+        assert_eq!(unblocks, vec!["c".to_string()]);
+    }
+
+    #[test]
+    fn test_compute_unblocks_nothing() {
+        // a (open) -> b (open, deps=[a])
+        // Closing a should unblock b
+        let issues = vec![
+            make_issue("a", IssueStatus::Closed, vec![]),
+            make_issue("b", IssueStatus::Open, vec!["a"]),
+        ];
+        let engine = AnalysisEngine::new(&issues);
+        let unblocks = engine.compute_unblocks("b");
+        // b has no dependents, so unblocks is empty
+        assert!(unblocks.is_empty());
+    }
+
+    #[test]
+    fn test_blocking_count_diamond() {
+        // top depends on left, right; left, right depend on bottom
+        // bottom blocks 2 issues (left, right)
+        let issues = vec![
+            make_issue("top", IssueStatus::Open, vec!["left", "right"]),
+            make_issue("left", IssueStatus::Open, vec!["bottom"]),
+            make_issue("right", IssueStatus::Open, vec!["bottom"]),
+            make_issue("bottom", IssueStatus::Open, vec![]),
+        ];
+        let engine = AnalysisEngine::new(&issues);
+        let triage = engine.compute_triage();
+
+        // bottom should have highest blocking_count (it blocks left and right)
+        let bottom_blocker = triage
+            .blockers
+            .iter()
+            .find(|b| b.id == "bottom")
+            .expect("bottom should be a blocker");
+        assert_eq!(bottom_blocker.blocking_count, 2);
+
+        // top should have 0 blocking_count (nothing depends on it)
+        let top_blocker = triage.blockers.iter().find(|b| b.id == "top");
+        assert!(top_blocker.is_none() || top_blocker.unwrap().blocking_count == 0);
     }
 }

@@ -57,9 +57,6 @@ pub enum MsError {
     #[error("CM not available: {0}")]
     CmUnavailable(String),
 
-    #[error("Beads not available: {0}")]
-    BeadsUnavailable(String),
-
     #[error("Mining failed: {0}")]
     MiningFailed(String),
 
@@ -137,7 +134,6 @@ impl MsError {
             Self::QueryParse(_) => ErrorCode::SearchQueryInvalid,
             Self::CassUnavailable(_) => ErrorCode::CassUnavailable,
             Self::CmUnavailable(_) => ErrorCode::CmUnavailable,
-            Self::BeadsUnavailable(_) => ErrorCode::BeadsUnavailable,
             Self::MiningFailed(_) => ErrorCode::MiningFailed,
             Self::Config(_) => ErrorCode::ConfigInvalid,
             Self::MissingConfig(_) => ErrorCode::ConfigMissingRequired,

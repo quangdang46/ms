@@ -9,13 +9,11 @@
 //! - JSONL file writing
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use serde_json::Value as JsonValue;
 
-use ms::beads::{Dependency, Issue, IssueStatus, IssueType};
-use ms::graph::bv::{BvClient, write_beads_jsonl};
 use ms::graph::skills::skills_to_issues;
+use ms::graph::types::{Dependency, Issue, IssueStatus, IssueType};
 use ms::storage::sqlite::SkillRecord;
 
 // ============================================================================
@@ -74,6 +72,7 @@ fn deprecated_skill(id: &str) -> SkillRecord {
     skill
 }
 
+#[allow(dead_code)]
 fn sample_issue(id: &str) -> Issue {
     Issue {
         id: id.to_string(),
@@ -96,6 +95,7 @@ fn sample_issue(id: &str) -> Issue {
     }
 }
 
+#[allow(dead_code)]
 fn issue_with_deps(id: &str, deps: Vec<&str>) -> Issue {
     let mut issue = sample_issue(id);
     issue.dependencies = deps
@@ -657,246 +657,6 @@ fn skills_to_issues_numeric_tags_ignored() {
 }
 
 // ============================================================================
-// BvClient Tests
-// ============================================================================
-
-#[test]
-fn bv_client_new_defaults() {
-    let client = BvClient::new();
-    // Can't directly inspect private fields, but we can verify it's constructible
-    assert!(!client.is_available() || client.is_available()); // Either is fine
-}
-
-#[test]
-fn bv_client_with_binary_custom_path() {
-    let client = BvClient::with_binary("/custom/path/to/bv");
-    // Verify custom binary (indirectly - it won't be available)
-    assert!(!client.is_available());
-}
-
-#[test]
-fn bv_client_with_work_dir() {
-    let client = BvClient::new().with_work_dir("/tmp");
-    // Just verify it builds without panic
-    let _ = client;
-}
-
-#[test]
-fn bv_client_with_env() {
-    let client = BvClient::new().with_env("BV_DEBUG", "1");
-    // Just verify it builds without panic
-    let _ = client;
-}
-
-#[test]
-fn bv_client_with_multiple_env() {
-    let client = BvClient::new()
-        .with_env("BV_DEBUG", "1")
-        .with_env("BV_COLOR", "never")
-        .with_env("PATH", "/usr/bin");
-    // Verify it builds without panic
-    let _ = client;
-}
-
-#[test]
-fn bv_client_builder_chain() {
-    let client = BvClient::with_binary("bv")
-        .with_work_dir("/tmp")
-        .with_env("DEBUG", "1")
-        .with_env("LOG_LEVEL", "info");
-    let _ = client;
-}
-
-#[test]
-fn bv_client_pathbuf_work_dir() {
-    let path = PathBuf::from("/home/user/project");
-    let client = BvClient::new().with_work_dir(path);
-    let _ = client;
-}
-
-// ============================================================================
-// write_beads_jsonl Tests
-// ============================================================================
-
-#[test]
-fn write_beads_jsonl_creates_directory() {
-    let temp = tempfile::tempdir().unwrap();
-    let issues = vec![sample_issue("test")];
-
-    let path = write_beads_jsonl(&issues, temp.path()).unwrap();
-
-    assert!(temp.path().join(".beads").exists());
-    assert!(path.ends_with("beads.jsonl"));
-}
-
-#[test]
-fn write_beads_jsonl_empty_issues() {
-    let temp = tempfile::tempdir().unwrap();
-    let issues: Vec<Issue> = vec![];
-
-    let path = write_beads_jsonl(&issues, temp.path()).unwrap();
-    let content = std::fs::read_to_string(path).unwrap();
-
-    assert!(content.is_empty());
-}
-
-#[test]
-fn write_beads_jsonl_single_issue() {
-    let temp = tempfile::tempdir().unwrap();
-    let issues = vec![sample_issue("single")];
-
-    let path = write_beads_jsonl(&issues, temp.path()).unwrap();
-    let content = std::fs::read_to_string(path).unwrap();
-    let lines: Vec<&str> = content.lines().collect();
-
-    assert_eq!(lines.len(), 1);
-    let parsed: Issue = serde_json::from_str(lines[0]).unwrap();
-    assert_eq!(parsed.id, "single");
-}
-
-#[test]
-fn write_beads_jsonl_multiple_issues() {
-    let temp = tempfile::tempdir().unwrap();
-    let issues = vec![
-        sample_issue("first"),
-        sample_issue("second"),
-        sample_issue("third"),
-    ];
-
-    let path = write_beads_jsonl(&issues, temp.path()).unwrap();
-    let content = std::fs::read_to_string(path).unwrap();
-    let lines: Vec<&str> = content.lines().collect();
-
-    assert_eq!(lines.len(), 3);
-
-    let first: Issue = serde_json::from_str(lines[0]).unwrap();
-    let second: Issue = serde_json::from_str(lines[1]).unwrap();
-    let third: Issue = serde_json::from_str(lines[2]).unwrap();
-
-    assert_eq!(first.id, "first");
-    assert_eq!(second.id, "second");
-    assert_eq!(third.id, "third");
-}
-
-#[test]
-fn write_beads_jsonl_preserves_all_fields() {
-    let temp = tempfile::tempdir().unwrap();
-    let mut issue = sample_issue("full");
-    issue.title = "Full Issue Title".to_string();
-    issue.description = "Detailed description".to_string();
-    issue.status = IssueStatus::InProgress;
-    issue.priority = 1;
-    issue.issue_type = IssueType::Feature;
-    issue.owner = Some("owner@example.com".to_string());
-    issue.assignee = Some("assignee@example.com".to_string());
-    issue.labels = vec!["label1".to_string(), "label2".to_string()];
-    issue.notes = Some("Some notes".to_string());
-    issue
-        .extra
-        .insert("custom".to_string(), JsonValue::String("value".to_string()));
-
-    let path = write_beads_jsonl(&[issue], temp.path()).unwrap();
-    let content = std::fs::read_to_string(path).unwrap();
-    let parsed: Issue = serde_json::from_str(content.trim()).unwrap();
-
-    assert_eq!(parsed.title, "Full Issue Title");
-    assert_eq!(parsed.description, "Detailed description");
-    assert_eq!(parsed.status, IssueStatus::InProgress);
-    assert_eq!(parsed.priority, 1);
-    assert_eq!(parsed.issue_type, IssueType::Feature);
-    assert_eq!(parsed.owner, Some("owner@example.com".to_string()));
-    assert_eq!(parsed.assignee, Some("assignee@example.com".to_string()));
-    assert_eq!(parsed.labels, vec!["label1", "label2"]);
-    assert_eq!(parsed.notes, Some("Some notes".to_string()));
-    assert_eq!(
-        parsed.extra.get("custom"),
-        Some(&JsonValue::String("value".to_string()))
-    );
-}
-
-#[test]
-fn write_beads_jsonl_with_dependencies() {
-    let temp = tempfile::tempdir().unwrap();
-    let issues = vec![issue_with_deps("main", vec!["dep1", "dep2"])];
-
-    let path = write_beads_jsonl(&issues, temp.path()).unwrap();
-    let content = std::fs::read_to_string(path).unwrap();
-    let parsed: Issue = serde_json::from_str(content.trim()).unwrap();
-
-    assert_eq!(parsed.dependencies.len(), 2);
-    let dep_ids: Vec<&str> = parsed.dependencies.iter().map(|d| d.id.as_str()).collect();
-    assert!(dep_ids.contains(&"dep1"));
-    assert!(dep_ids.contains(&"dep2"));
-}
-
-#[test]
-fn write_beads_jsonl_special_characters() {
-    let temp = tempfile::tempdir().unwrap();
-    let mut issue = sample_issue("special");
-    issue.title = "Issue with \"quotes\" and \\backslash".to_string();
-    issue.description = "Line1\nLine2\tTabbed".to_string();
-
-    let path = write_beads_jsonl(&[issue], temp.path()).unwrap();
-    let content = std::fs::read_to_string(path).unwrap();
-    let parsed: Issue = serde_json::from_str(content.trim()).unwrap();
-
-    assert_eq!(parsed.title, "Issue with \"quotes\" and \\backslash");
-    assert_eq!(parsed.description, "Line1\nLine2\tTabbed");
-}
-
-#[test]
-fn write_beads_jsonl_unicode() {
-    let temp = tempfile::tempdir().unwrap();
-    let mut issue = sample_issue("unicode");
-    issue.title = "Unicode: 日本語 🎉 émojis".to_string();
-    issue.description = "Multilingual: العربية, 中文, Ελληνικά".to_string();
-
-    let path = write_beads_jsonl(&[issue], temp.path()).unwrap();
-    let content = std::fs::read_to_string(path).unwrap();
-    let parsed: Issue = serde_json::from_str(content.trim()).unwrap();
-
-    assert_eq!(parsed.title, "Unicode: 日本語 🎉 émojis");
-    assert_eq!(parsed.description, "Multilingual: العربية, 中文, Ελληνικά");
-}
-
-#[test]
-fn write_beads_jsonl_idempotent() {
-    let temp = tempfile::tempdir().unwrap();
-    let issues = vec![sample_issue("idem")];
-
-    // Write twice
-    let path1 = write_beads_jsonl(&issues, temp.path()).unwrap();
-    let content1 = std::fs::read_to_string(&path1).unwrap();
-
-    let path2 = write_beads_jsonl(&issues, temp.path()).unwrap();
-    let content2 = std::fs::read_to_string(&path2).unwrap();
-
-    assert_eq!(path1, path2);
-    assert_eq!(content1, content2);
-}
-
-#[test]
-fn write_beads_jsonl_overwrites_existing() {
-    let temp = tempfile::tempdir().unwrap();
-
-    // Write first set
-    let issues1 = vec![sample_issue("first")];
-    write_beads_jsonl(&issues1, temp.path()).unwrap();
-
-    // Write second set (different)
-    let issues2 = vec![sample_issue("second"), sample_issue("third")];
-    let path = write_beads_jsonl(&issues2, temp.path()).unwrap();
-
-    let content = std::fs::read_to_string(path).unwrap();
-    let lines: Vec<&str> = content.lines().collect();
-
-    assert_eq!(lines.len(), 2);
-    assert!(!content.contains("\"first\""));
-    assert!(content.contains("\"second\""));
-    assert!(content.contains("\"third\""));
-}
-
-// ============================================================================
 // Issue Type Tests
 // ============================================================================
 
@@ -955,18 +715,4 @@ fn skills_to_issues_complex_dependency_graph() {
 
     let skill_0 = issues.iter().find(|i| i.id == "skill-0").unwrap();
     assert!(skill_0.dependencies.is_empty());
-}
-
-#[test]
-fn write_beads_jsonl_many_issues() {
-    let temp = tempfile::tempdir().unwrap();
-    let issues: Vec<Issue> = (0..100)
-        .map(|i| sample_issue(&format!("issue-{}", i)))
-        .collect();
-
-    let path = write_beads_jsonl(&issues, temp.path()).unwrap();
-    let content = std::fs::read_to_string(path).unwrap();
-    let lines: Vec<&str> = content.lines().collect();
-
-    assert_eq!(lines.len(), 100);
 }

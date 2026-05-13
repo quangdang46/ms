@@ -116,10 +116,10 @@ impl AnalysisEngine {
         let blockers: Vec<BlockerItem> = self
             .issues()
             .iter()
-            .filter(|i| i.is_active() && !i.dependencies.is_empty())
+            .filter(|i| i.is_active())
             .filter_map(|i| {
                 let idx = self.graph().node_idx(&i.id)?;
-                let blocking_count = self.graph().in_degree(idx);
+                let blocking_count = self.graph().out_degree(idx);
                 if blocking_count > 0 {
                     Some(BlockerItem {
                         id: i.id.clone(),

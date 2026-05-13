@@ -83,18 +83,19 @@ impl AnalysisEngine {
                 let bw = m.betweenness.get(idx).copied().unwrap_or(0.0) / bw_max;
                 let cp = m.critical_path_heights.get(idx).copied().unwrap_or(0.0) / cp_max;
 
-                let in_deg = self.graph().in_degree(idx) as f64;
-                let max_in = self
+                // out_degree = number of dependents (issues this one blocks)
+                let out_deg = self.graph().out_degree(idx) as f64;
+                let max_out = self
                     .graph()
-                    .in_degrees()
+                    .out_degrees()
                     .iter()
                     .max()
                     .copied()
                     .unwrap_or(1)
                     .max(1) as f64;
-                let blocker_ratio = in_deg / max_in;
+                let blocker_ratio = out_deg / max_out;
 
-                let priority_boost = (4 - issue.priority) as f64 / 4.0;
+                let priority_boost = (4 - issue.priority.min(4)) as f64 / 4.0;
 
                 let w = &DEFAULT_WEIGHTS;
                 let score = w.pagerank * pr

@@ -7,7 +7,6 @@
 //! - Prune analyze and proposals
 
 use std::fs;
-use std::process::Command;
 
 use super::fixture::E2EFixture;
 use ms::error::Result;
@@ -127,19 +126,6 @@ fn setup_prune_merge_fixture(scenario: &str) -> Result<E2EFixture> {
     fixture.checkpoint("prune-merge:indexed");
 
     Ok(fixture)
-}
-
-fn init_beads_workspace(fixture: &E2EFixture) {
-    let output = Command::new("br")
-        .args(["init", "--json"])
-        .current_dir(&fixture.root)
-        .output()
-        .expect("failed to run br init for prune workflow");
-    assert!(
-        output.status.success(),
-        "br init failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
 }
 
 fn create_tombstone(fixture: &E2EFixture, relative_path: &str) -> Result<String> {
@@ -541,59 +527,6 @@ fn test_prune_proposals_dry_run() -> Result<()> {
             "merge_count": stats["merge_proposals"],
             "split_count": stats["split_proposals"],
         })),
-    );
-
-    fixture.generate_report();
-    Ok(())
-}
-
-#[test]
-fn test_prune_proposals_emit_beads() -> Result<()> {
-    let mut fixture = setup_prune_fixture("prune_proposals_emit_beads")?;
-    init_beads_workspace(&fixture);
-
-    fixture.log_step("Generate prune proposals and emit beads");
-    let output = fixture.run_ms(&["--robot", "prune", "proposals", "--emit-beads"]);
-    fixture.assert_success(&output, "prune proposals emit beads");
-
-    let json = output.json();
-    let created = json["beads"]["created"]
-        .as_array()
-        .expect("beads.created array");
-
-    assert_eq!(json["status"].as_str(), Some("proposals_ready"));
-    assert_eq!(json["beads"]["emitted"].as_bool(), Some(true));
-    assert!(
-        !created.is_empty(),
-        "Expected prune proposals to emit at least one bead"
-    );
-
-    let br_output = Command::new("br")
-        .args(["list", "--json"])
-        .current_dir(&fixture.root)
-        .output()
-        .expect("failed to run br list after prune proposal emission");
-    assert!(
-        br_output.status.success(),
-        "br list failed: {}",
-        String::from_utf8_lossy(&br_output.stderr)
-    );
-
-    let created_beads: serde_json::Value =
-        serde_json::from_slice(&br_output.stdout).expect("valid br list json");
-    let created_beads = created_beads.as_array().expect("br list array");
-
-    assert_eq!(
-        created_beads.len(),
-        created.len(),
-        "br workspace should contain the emitted prune proposal beads"
-    );
-    assert!(
-        created_beads.iter().all(|issue| issue["title"]
-            .as_str()
-            .map(|title| title.contains("ms-prune-"))
-            .unwrap_or(false)),
-        "All emitted bead titles should use the ms-prune prefix"
     );
 
     fixture.generate_report();

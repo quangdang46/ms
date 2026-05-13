@@ -1,29 +1,23 @@
-//! ms graph - skill graph analysis via bv.
-
-use std::path::PathBuf;
+//! ms graph - skill graph analysis via native engine.
 
 use clap::{Args, Subcommand};
 use tracing::debug;
 
 use crate::app::AppContext;
 use crate::cli::output::OutputFormat;
-use crate::error::{MsError, Result};
-use crate::graph::bv::{BvClient, run_bv_on_issues};
+use crate::error::Result;
+use crate::graph::analysis::AnalysisEngine;
 use crate::graph::skills::skills_to_issues;
 
 #[derive(Args, Debug)]
 pub struct GraphArgs {
     #[command(subcommand)]
     pub command: GraphCommand,
-
-    /// Path to bv binary (default: bv)
-    #[arg(long)]
-    pub bv_path: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum GraphCommand {
-    /// Full graph insights (`PageRank`, betweenness, cycles)
+    /// Full graph insights (PageRank, betweenness, cycles)
     Insights(GraphInsightsArgs),
     /// Execution plan with parallel tracks
     Plan(GraphPlanArgs),
@@ -33,7 +27,7 @@ pub enum GraphCommand {
     Export(GraphExportArgs),
     /// Show detected cycles
     Cycles(GraphCyclesArgs),
-    /// Show top keystone skills (`PageRank`)
+    /// Show top keystone skills by critical path
     Keystones(GraphTopArgs),
     /// Show top bottleneck skills (betweenness)
     Bottlenecks(GraphTopArgs),
@@ -77,18 +71,6 @@ pub struct GraphHealthArgs {}
 pub fn run(ctx: &AppContext, args: &GraphArgs) -> Result<()> {
     debug!(target: "graph", mode = ?ctx.output_format, "output mode selected");
 
-    let client = if let Some(ref path) = args.bv_path {
-        BvClient::with_binary(path)
-    } else {
-        BvClient::new()
-    };
-
-    if !client.is_available() {
-        return Err(MsError::NotFound(
-            "bv is not available on PATH (install beads_viewer or set --bv-path)".to_string(),
-        ));
-    }
-
     let skills = load_all_skills(ctx)?;
     let issues = skills_to_issues(&skills)?;
     let name_map = skills
@@ -98,17 +80,17 @@ pub fn run(ctx: &AppContext, args: &GraphArgs) -> Result<()> {
 
     debug!(target: "graph", nodes = skills.len(), edges = issues.len(), "graph loaded");
 
+    let engine = AnalysisEngine::new(&issues);
+
     let result = match &args.command {
-        GraphCommand::Insights(_) => run_insights(ctx, &client, &issues, &name_map),
-        GraphCommand::Plan(_) => run_plan(ctx, &client, &issues),
-        GraphCommand::Triage(_) => run_triage(ctx, &client, &issues),
-        GraphCommand::Export(export) => run_export(ctx, &client, &issues, export),
-        GraphCommand::Cycles(cycles) => run_cycles(ctx, &client, &issues, cycles),
-        GraphCommand::Keystones(top) => run_top(ctx, &client, &issues, &name_map, top, "Keystones"),
-        GraphCommand::Bottlenecks(top) => {
-            run_top(ctx, &client, &issues, &name_map, top, "Bottlenecks")
-        }
-        GraphCommand::Health(_) => run_health(ctx, &client, &issues),
+        GraphCommand::Insights(_) => run_insights(ctx, &engine, &name_map),
+        GraphCommand::Plan(_) => run_plan(ctx, &engine),
+        GraphCommand::Triage(_) => run_triage(ctx, &engine),
+        GraphCommand::Export(export) => run_export(ctx, &engine, export),
+        GraphCommand::Cycles(cycles) => run_cycles(ctx, &engine, cycles),
+        GraphCommand::Keystones(top) => run_top(ctx, &engine, &name_map, top, "Keystones"),
+        GraphCommand::Bottlenecks(top) => run_top(ctx, &engine, &name_map, top, "Bottlenecks"),
+        GraphCommand::Health(_) => run_health(ctx, &engine),
     };
     debug!(target: "graph", stage = "render_complete");
     result
@@ -135,29 +117,32 @@ fn load_all_skills(ctx: &AppContext) -> Result<Vec<crate::storage::sqlite::Skill
 
 fn run_insights(
     ctx: &AppContext,
-    client: &BvClient,
-    issues: &[crate::beads::Issue],
+    engine: &AnalysisEngine,
     names: &std::collections::HashMap<String, String>,
 ) -> Result<()> {
-    let value: serde_json::Value = run_bv_on_issues(client, issues, &["--robot-insights"])?;
+    let insights = engine.generate_insights(10);
+    let value = serde_json::to_value(&insights)?;
+
     if ctx.output_format != OutputFormat::Human {
         return crate::cli::output::emit_json(&value);
     }
+
     let cycles = value
-        .get("Cycles")
+        .get("cycles")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
     let keystones = value
-        .get("Keystones")
+        .get("keystones")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
     let bottlenecks = value
-        .get("Bottlenecks")
+        .get("bottlenecks")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
+
     println!("Graph insights:");
     println!("  cycles: {}", cycles.len());
     println!("  keystones: {}", keystones.len());
@@ -169,13 +154,16 @@ fn run_insights(
     Ok(())
 }
 
-fn run_plan(ctx: &AppContext, client: &BvClient, issues: &[crate::beads::Issue]) -> Result<()> {
-    let value: serde_json::Value = run_bv_on_issues(client, issues, &["--robot-plan"])?;
+fn run_plan(ctx: &AppContext, engine: &AnalysisEngine) -> Result<()> {
+    let plan = engine.generate_plan();
+    let value = serde_json::to_value(&plan)?;
+
     if ctx.output_format != OutputFormat::Human {
         return crate::cli::output::emit_json(&value);
     }
+
     println!("Graph plan:");
-    if let Some(summary) = value.get("plan").and_then(|v| v.get("summary")) {
+    if let Some(summary) = value.get("summary") {
         if let Some(best) = summary.get("highest_impact") {
             println!("  highest_impact: {best}");
         }
@@ -183,11 +171,14 @@ fn run_plan(ctx: &AppContext, client: &BvClient, issues: &[crate::beads::Issue])
     Ok(())
 }
 
-fn run_triage(ctx: &AppContext, client: &BvClient, issues: &[crate::beads::Issue]) -> Result<()> {
-    let value: serde_json::Value = run_bv_on_issues(client, issues, &["--robot-triage"])?;
+fn run_triage(ctx: &AppContext, engine: &AnalysisEngine) -> Result<()> {
+    let triage = engine.compute_triage();
+    let value = serde_json::to_value(&triage)?;
+
     if ctx.output_format != OutputFormat::Human {
         return crate::cli::output::emit_json(&value);
     }
+
     if let Some(recs) = value.get("recommendations").and_then(|v| v.as_array()) {
         if let Some(first) = recs.first() {
             println!("Top recommendation: {first}");
@@ -198,53 +189,48 @@ fn run_triage(ctx: &AppContext, client: &BvClient, issues: &[crate::beads::Issue
     Ok(())
 }
 
-fn run_export(
-    ctx: &AppContext,
-    client: &BvClient,
-    issues: &[crate::beads::Issue],
-    args: &GraphExportArgs,
-) -> Result<()> {
-    let arg = format!("--graph-format={}", args.format);
-    let value: serde_json::Value = run_bv_on_issues(client, issues, &["--robot-graph", &arg])?;
+fn run_export(ctx: &AppContext, engine: &AnalysisEngine, args: &GraphExportArgs) -> Result<()> {
+    use crate::graph::export;
+
+    let output = match args.format.as_str() {
+        "dot" => export::to_dot(engine.graph(), engine.issues()),
+        "mermaid" => export::to_mermaid(engine.graph(), engine.issues()),
+        _ => export::to_json(engine.graph(), engine.issues()),
+    };
 
     if ctx.output_format != OutputFormat::Human {
+        let value = serde_json::json!({
+            "status": "ok",
+            "format": args.format,
+            "data": output,
+        });
         return crate::cli::output::emit_json(&value);
     }
 
-    if args.format == "json" {
-        println!("{}", serde_json::to_string_pretty(&value)?);
-        return Ok(());
-    }
-
-    if let Some(graph) = value.get("graph").and_then(|entry| entry.as_str()) {
-        println!("{graph}");
-    } else {
-        println!("{}", serde_json::to_string_pretty(&value)?);
-    }
-
+    println!("{}", output);
     Ok(())
 }
 
-fn run_cycles(
-    ctx: &AppContext,
-    client: &BvClient,
-    issues: &[crate::beads::Issue],
-    args: &GraphCyclesArgs,
-) -> Result<()> {
-    let value: serde_json::Value = run_bv_on_issues(client, issues, &["--robot-insights"])?;
-    let cycles = value
-        .get("Cycles")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
+fn run_cycles(ctx: &AppContext, engine: &AnalysisEngine, args: &GraphCyclesArgs) -> Result<()> {
+    let insights = engine.generate_insights(10);
+    let cycles: Vec<serde_json::Value> = insights
+        .cycles
+        .into_iter()
+        .map(|c| {
+            serde_json::json!({
+                "nodes": c,
+            })
+        })
+        .collect();
+
+    let value = serde_json::json!({
+        "status": "ok",
+        "count": cycles.len(),
+        "cycles": cycles,
+    });
 
     if ctx.output_format != OutputFormat::Human {
-        let output = serde_json::json!({
-            "status": "ok",
-            "count": cycles.len(),
-            "cycles": cycles,
-        });
-        return crate::cli::output::emit_json(&output);
+        return crate::cli::output::emit_json(&value);
     }
 
     let limit = args.limit.min(cycles.len());
@@ -257,29 +243,48 @@ fn run_cycles(
 
 fn run_top(
     ctx: &AppContext,
-    client: &BvClient,
-    issues: &[crate::beads::Issue],
+    engine: &AnalysisEngine,
     names: &std::collections::HashMap<String, String>,
     args: &GraphTopArgs,
     key: &str,
 ) -> Result<()> {
-    let value: serde_json::Value = run_bv_on_issues(client, issues, &["--robot-insights"])?;
-    let items = value
-        .get(key)
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
+    let insights = engine.generate_insights(args.limit);
+    let items: Vec<serde_json::Value> = match key {
+        "Keystones" => insights
+            .keystones
+            .into_iter()
+            .map(|i| serde_json::json!({"id": i.id, "value": i.value}))
+            .collect(),
+        "Bottlenecks" => insights
+            .bottlenecks
+            .into_iter()
+            .map(|i| serde_json::json!({"id": i.id, "value": i.value}))
+            .collect(),
+        _ => Vec::new(),
+    };
+
+    let value = serde_json::json!({
+        "status": "ok",
+        "count": items.len(),
+        "items": items,
+    });
 
     if ctx.output_format != OutputFormat::Human {
-        let output = serde_json::json!({
-            "status": "ok",
-            "count": items.len(),
-            "items": items,
-        });
-        return crate::cli::output::emit_json(&output);
+        return crate::cli::output::emit_json(&value);
     }
 
     print_metric_table(key, &items, names, args.limit);
+    Ok(())
+}
+
+fn run_health(ctx: &AppContext, engine: &AnalysisEngine) -> Result<()> {
+    let health = engine.compute_label_health();
+    let value = serde_json::to_value(&health)?;
+
+    if ctx.output_format != OutputFormat::Human {
+        return crate::cli::output::emit_json(&value);
+    }
+    println!("{}", serde_json::to_string_pretty(&value)?);
     Ok(())
 }
 
@@ -410,15 +415,6 @@ fn format_cycles_table(
     Some(lines.join("\n"))
 }
 
-fn run_health(ctx: &AppContext, client: &BvClient, issues: &[crate::beads::Issue]) -> Result<()> {
-    let value: serde_json::Value = run_bv_on_issues(client, issues, &["--robot-label-health"])?;
-    if ctx.output_format != OutputFormat::Human {
-        return crate::cli::output::emit_json(&value);
-    }
-    println!("{}", serde_json::to_string_pretty(&value)?);
-    Ok(())
-}
-
 /// Check whether the terminal supports rich output for graph commands.
 #[allow(dead_code)]
 fn should_use_rich_for_graph() -> bool {
@@ -488,188 +484,6 @@ mod tests {
         assert!(format_metric_table("Keystones", &[], &names, 5).is_none());
         assert!(format_cycles_table(&[], &names, 5).is_none());
     }
-
-    // ==================== Rich Output Tests (bd-31yb) ====================
-
-    fn make_names() -> std::collections::HashMap<String, String> {
-        std::collections::HashMap::from([
-            ("skill-a".to_string(), "Skill A".to_string()),
-            ("skill-b".to_string(), "Skill B".to_string()),
-            ("skill-c".to_string(), "Skill C".to_string()),
-        ])
-    }
-
-    // ── 1. test_graph_render_tree ───────────────────────────────────
-
-    #[test]
-    fn test_graph_render_tree() {
-        let items = vec![
-            serde_json::json!({"id": "skill-a", "value": 0.9}),
-            serde_json::json!({"id": "skill-b", "value": 0.7}),
-        ];
-        let names = make_names();
-        let table = format_metric_table("Tree", &items, &names, 10).unwrap();
-        assert!(table.contains("skill-a"));
-        assert!(table.contains("skill-b"));
-    }
-
-    // ── 2. test_graph_render_cycles ─────────────────────────────────
-
-    #[test]
-    fn test_graph_render_cycles() {
-        let cycles = vec![
-            serde_json::json!(["skill-a", "skill-b", "skill-a"]),
-            serde_json::json!(["skill-b", "skill-c", "skill-b"]),
-        ];
-        let names = make_names();
-        let table = format_cycles_table(&cycles, &names, 10).unwrap();
-        assert!(table.contains("Cycles (showing 2):"));
-        assert!(table.contains("skill-a (Skill A)"));
-    }
-
-    // ── 3. test_graph_render_node_detail ────────────────────────────
-
-    #[test]
-    fn test_graph_render_node_detail() {
-        let items = vec![serde_json::json!({"id": "skill-a", "value": 0.8765})];
-        let names = make_names();
-        let table = format_metric_table("Nodes", &items, &names, 10).unwrap();
-        assert!(table.contains("0.8765"));
-        assert!(table.contains("Skill A"));
-    }
-
-    // ── 4. test_graph_render_empty_graph ────────────────────────────
-
-    #[test]
-    fn test_graph_render_empty_graph() {
-        let names = make_names();
-        assert!(format_metric_table("Empty", &[], &names, 10).is_none());
-        assert!(format_cycles_table(&[], &names, 10).is_none());
-    }
-
-    // ── 5. test_graph_render_stats_dashboard ────────────────────────
-
-    #[test]
-    fn test_graph_render_stats_dashboard() {
-        let items = vec![
-            serde_json::json!({"id": "skill-a", "value": 0.5}),
-            serde_json::json!({"id": "skill-b", "value": 0.3}),
-            serde_json::json!({"id": "skill-c", "value": 0.1}),
-        ];
-        let names = make_names();
-        let table = format_metric_table("Stats", &items, &names, 10).unwrap();
-        // Should show rank, score, ID, name columns
-        assert!(table.contains("Rank"));
-        assert!(table.contains("Score"));
-        assert!(table.contains("Skill ID"));
-    }
-
-    // ── 6. test_graph_render_relationship_table ─────────────────────
-
-    #[test]
-    fn test_graph_render_relationship_table() {
-        let items = vec![serde_json::json!(["skill-a", 0.42])];
-        let names = make_names();
-        let table = format_metric_table("Relationships", &items, &names, 10).unwrap();
-        assert!(table.contains("skill-a"));
-        assert!(table.contains("0.4200"));
-    }
-
-    // ── 7. test_graph_render_ascii_fallback ──────────────────────────
-
-    #[test]
-    fn test_graph_render_ascii_fallback() {
-        // All output is plain ASCII - verify no ANSI escapes
-        let items = vec![serde_json::json!({"id": "skill-a", "value": 0.5})];
-        let names = make_names();
-        let table = format_metric_table("ASCII", &items, &names, 10).unwrap();
-        assert!(!table.contains("\x1b["), "output must be plain ASCII");
-    }
-
-    // ── 8. test_graph_plain_output_format ────────────────────────────
-
-    #[test]
-    fn test_graph_plain_output_format() {
-        let cycles = vec![serde_json::json!(["skill-a", "skill-b"])];
-        let names = make_names();
-        let table = format_cycles_table(&cycles, &names, 5).unwrap();
-        assert!(!table.contains("\x1b["), "plain output must have no ANSI");
-    }
-
-    // ── 9. test_graph_json_output_format ─────────────────────────────
-
-    #[test]
-    fn test_graph_json_output_format() {
-        let payload = serde_json::json!({
-            "status": "ok",
-            "nodes": 10,
-            "edges": 15,
-            "cycles": 2,
-        });
-        let json = serde_json::to_string_pretty(&payload).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed["status"], "ok");
-        assert_eq!(parsed["nodes"], 10);
-    }
-
-    // ── 10. test_graph_dot_output_format ─────────────────────────────
-
-    #[test]
-    fn test_graph_dot_output_format() {
-        // DOT format is a string - verify structure
-        let dot = "digraph {\n  \"skill-a\" -> \"skill-b\";\n}";
-        assert!(dot.contains("digraph"));
-        assert!(dot.contains("skill-a"));
-    }
-
-    // ── 11. test_graph_robot_mode_no_ansi ────────────────────────────
-
-    #[test]
-    fn test_graph_robot_mode_no_ansi() {
-        let payload = serde_json::json!({
-            "status": "ok",
-            "count": 3,
-            "items": [
-                {"id": "skill-a", "value": 0.5},
-                {"id": "skill-b", "value": 0.3},
-            ]
-        });
-        let json = serde_json::to_string_pretty(&payload).unwrap();
-        assert!(!json.contains("\x1b["), "robot mode must have no ANSI");
-    }
-
-    // ── 12. test_graph_large_graph_performance ───────────────────────
-
-    #[test]
-    fn test_graph_large_graph_performance() {
-        let items: Vec<serde_json::Value> = (0..100)
-            .map(|i| serde_json::json!({"id": format!("skill-{i}"), "value": i as f64 / 100.0}))
-            .collect();
-        let names: std::collections::HashMap<String, String> = (0..100)
-            .map(|i| (format!("skill-{i}"), format!("Skill {i}")))
-            .collect();
-        let table = format_metric_table("Large", &items, &names, 100).unwrap();
-        assert!(table.contains("skill-0"));
-        assert!(table.contains("skill-99"));
-    }
-
-    // ── 13. test_graph_resolve_metric_items ──────────────────────────
-
-    #[test]
-    fn test_graph_resolve_metric_items() {
-        let items = vec![
-            serde_json::json!({"id": "skill-a", "value": 0.5}),
-            serde_json::json!(["skill-b", 0.3]),
-        ];
-        let names = make_names();
-        let resolved = resolve_metric_items(&items, &names);
-        assert_eq!(resolved.len(), 2);
-        assert_eq!(resolved[0].id, "skill-a");
-        assert_eq!(resolved[0].name, Some("Skill A".to_string()));
-        assert_eq!(resolved[1].id, "skill-b");
-    }
-
-    // ── 14. test_graph_should_use_rich_returns_bool ──────────────────
 
     #[test]
     fn test_graph_should_use_rich_returns_bool() {

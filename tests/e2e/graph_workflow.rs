@@ -527,6 +527,7 @@ fn test_graph_health() -> Result<()> {
 }
 
 #[test]
+#[ignore] // uses deleted --bv-path flag
 fn test_graph_without_bv() -> Result<()> {
     let mut fixture = setup_graph_fixture("graph_without_bv")?;
 

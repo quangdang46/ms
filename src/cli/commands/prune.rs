@@ -14,7 +14,6 @@ use std::path::PathBuf;
 use which::which;
 
 use crate::app::AppContext;
-use crate::beads::{BeadsClient, CreateIssueRequest, IssueType, Priority};
 use crate::cli::output::OutputFormat;
 use crate::cli::output::{HumanLayout, emit_human};
 use crate::core::spec_lens::{compile_markdown, parse_markdown};
@@ -99,10 +98,6 @@ pub struct AnalyzeArgs {
     /// Maximum child drafts per split proposal
     #[arg(long, default_value = "3")]
     pub split_max_children: usize,
-
-    /// Emit beads issues for proposals
-    #[arg(long)]
-    pub emit_beads: bool,
 }
 
 #[derive(Args, Debug)]
@@ -482,19 +477,9 @@ fn build_proposals(ctx: &AppContext, args: &AnalyzeArgs, dry_run: bool) -> Resul
 
 fn run_proposals(ctx: &AppContext, args: &AnalyzeArgs, dry_run: bool) -> Result<()> {
     let proposals = build_proposals(ctx, args, dry_run)?;
-    let mut created_beads = Vec::new();
-
-    if args.emit_beads {
-        created_beads = emit_beads(
-            ctx,
-            &proposals.deprecate,
-            &proposals.merge,
-            &proposals.split,
-        )?;
-    }
 
     if ctx.output_format != OutputFormat::Human {
-        let mut output = json!({
+        let output = json!({
             "status": "proposals_ready",
             "window_days": args.days,
             "min_usage": args.min_usage,
@@ -513,21 +498,6 @@ fn run_proposals(ctx: &AppContext, args: &AnalyzeArgs, dry_run: bool) -> Result<
                 "split_proposals": proposals.split.len(),
             },
         });
-        if args.emit_beads {
-            let beads_summary: Vec<_> = created_beads
-                .iter()
-                .map(|issue| json!({"id": issue.id, "title": issue.title}))
-                .collect();
-            if let Some(obj) = output.as_object_mut() {
-                obj.insert(
-                    "beads".to_string(),
-                    json!({
-                        "emitted": true,
-                        "created": beads_summary,
-                    }),
-                );
-            }
-        }
         println!("{}", serde_json::to_string_pretty(&output)?);
         return Ok(());
     }
@@ -596,17 +566,6 @@ fn run_proposals(ctx: &AppContext, args: &AnalyzeArgs, dry_run: bool) -> Result<
                 line.push_str(&format!(" (draft: {path})"));
             }
             layout.bullet(&line);
-        }
-    }
-
-    if args.emit_beads {
-        layout.section("Beads");
-        if created_beads.is_empty() {
-            layout.bullet("No proposals emitted");
-        } else {
-            for issue in &created_beads {
-                layout.bullet(&format!("{} ({})", issue.title, issue.id));
-            }
         }
     }
 
@@ -1460,102 +1419,6 @@ fn pick_merge_target(
     (target, target_name)
 }
 
-fn emit_beads(
-    ctx: &AppContext,
-    deprecate: &[DeprecateProposal],
-    merge: &[MergeProposal],
-    split: &[SplitProposal],
-) -> Result<Vec<crate::beads::Issue>> {
-    let work_dir = beads_work_dir(&ctx.ms_root);
-    let client = BeadsClient::new().with_work_dir(work_dir);
-    if !client.is_available() {
-        return Err(MsError::BeadsUnavailable(
-            "bd not available (install beads or configure PATH)".to_string(),
-        ));
-    }
-
-    let mut created = Vec::new();
-    let mut index = 1usize;
-
-    for proposal in merge {
-        let title = format!(
-            "ms-prune-{:03}: Merge {} + {}",
-            index, proposal.sources[0], proposal.sources[1]
-        );
-        let description = format!(
-            "Type: merge\nSources: {} + {}\nTarget: {} ({})\nSimilarity: {:.2}\nRationale: {}",
-            proposal.sources[0],
-            proposal.sources[1],
-            proposal.target_id,
-            proposal.target_name,
-            proposal.similarity,
-            proposal.rationale
-        );
-        let req = CreateIssueRequest::new(title)
-            .with_type(IssueType::Task)
-            .with_priority(2 as Priority)
-            .with_description(description)
-            .with_label("prune")
-            .with_label("proposal")
-            .with_label("merge");
-        created.push(client.create(&req)?);
-        index += 1;
-    }
-
-    for proposal in split {
-        let title = format!("ms-prune-{:03}: Split {}", index, proposal.skill_id);
-        let description = format!(
-            "Type: split\nSkill: {} ({})\nRationale: {}\nChildren: {}",
-            proposal.skill_id,
-            proposal.name,
-            proposal.rationale,
-            proposal.children.len()
-        );
-        let req = CreateIssueRequest::new(title)
-            .with_type(IssueType::Task)
-            .with_priority(2 as Priority)
-            .with_description(description)
-            .with_label("prune")
-            .with_label("proposal")
-            .with_label("split");
-        created.push(client.create(&req)?);
-        index += 1;
-    }
-
-    for proposal in deprecate {
-        let title = format!("ms-prune-{:03}: Deprecate {}", index, proposal.skill_id);
-        let description = format!(
-            "Type: deprecate\nSkill: {} ({})\nRationale: {}",
-            proposal.skill_id, proposal.name, proposal.rationale
-        );
-        let req = CreateIssueRequest::new(title)
-            .with_type(IssueType::Task)
-            .with_priority(3 as Priority)
-            .with_description(description)
-            .with_label("prune")
-            .with_label("proposal")
-            .with_label("deprecate");
-        created.push(client.create(&req)?);
-        index += 1;
-    }
-
-    Ok(created)
-}
-
-fn beads_work_dir(ms_root: &PathBuf) -> PathBuf {
-    let mut candidates = Vec::new();
-    candidates.push(ms_root.clone());
-    if let Some(parent) = ms_root.parent() {
-        candidates.push(parent.to_path_buf());
-    }
-    for candidate in &candidates {
-        if candidate.join(".beads").is_dir() {
-            return candidate.clone();
-        }
-    }
-    std::env::current_dir().unwrap_or_else(|_| ms_root.clone())
-}
-
 fn run_list(ctx: &AppContext, args: &PruneArgs) -> Result<()> {
     let manager = TombstoneManager::new(&ctx.ms_root);
 
@@ -1929,7 +1792,7 @@ mod tests {
                 assert_eq!(args.per_skill, 5);
                 assert_eq!(args.split_min_sections, 6);
                 assert_eq!(args.split_max_children, 3);
-                assert!(!args.emit_beads);
+                // emit_beads removed
             }
             _ => panic!("Expected Analyze subcommand"),
         }
@@ -1986,7 +1849,7 @@ mod tests {
                 assert_eq!(args.per_skill, 5);
                 assert_eq!(args.split_min_sections, 6);
                 assert_eq!(args.split_max_children, 3);
-                assert!(!args.emit_beads);
+                // emit_beads removed
             }
             _ => panic!("Expected Proposals subcommand"),
         }
@@ -2025,18 +1888,7 @@ mod tests {
                 assert_eq!(args.per_skill, 4);
                 assert_eq!(args.split_min_sections, 7);
                 assert_eq!(args.split_max_children, 2);
-                assert!(!args.emit_beads);
-            }
-            _ => panic!("Expected Proposals subcommand"),
-        }
-    }
-
-    #[test]
-    fn parse_prune_proposals_emit_beads() {
-        let cli = TestCli::try_parse_from(["test", "proposals", "--emit-beads"]).unwrap();
-        match cli.prune.command {
-            Some(PruneCommand::Proposals(args)) => {
-                assert!(args.emit_beads);
+                // emit_beads removed
             }
             _ => panic!("Expected Proposals subcommand"),
         }

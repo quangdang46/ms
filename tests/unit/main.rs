@@ -1,8 +1,10 @@
 //! Unit test suite entry point.
 
 mod agent_mail_tests;
+mod analysis_tests;
 mod cli_command_parse_tests;
 mod config_tests;
+mod graph_engine_tests;
 mod graph_tests;
 mod hash_embed_tests;
 mod meta_skills_tests;

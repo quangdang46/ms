@@ -12,8 +12,8 @@ use std::collections::HashMap;
 
 use serde_json::Value as JsonValue;
 
-use ms::graph::types::{Dependency, Issue, IssueStatus, IssueType};
 use ms::graph::skills::skills_to_issues;
+use ms::graph::types::{Dependency, Issue, IssueStatus, IssueType};
 use ms::storage::sqlite::SkillRecord;
 
 // ============================================================================
@@ -72,6 +72,7 @@ fn deprecated_skill(id: &str) -> SkillRecord {
     skill
 }
 
+#[allow(dead_code)]
 fn sample_issue(id: &str) -> Issue {
     Issue {
         id: id.to_string(),
@@ -94,6 +95,7 @@ fn sample_issue(id: &str) -> Issue {
     }
 }
 
+#[allow(dead_code)]
 fn issue_with_deps(id: &str, deps: Vec<&str>) -> Issue {
     let mut issue = sample_issue(id);
     issue.dependencies = deps

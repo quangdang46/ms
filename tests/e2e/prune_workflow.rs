@@ -7,7 +7,6 @@
 //! - Prune analyze and proposals
 
 use std::fs;
-use std::process::Command;
 
 use super::fixture::E2EFixture;
 use ms::error::Result;
@@ -128,7 +127,6 @@ fn setup_prune_merge_fixture(scenario: &str) -> Result<E2EFixture> {
 
     Ok(fixture)
 }
-
 
 fn create_tombstone(fixture: &E2EFixture, relative_path: &str) -> Result<String> {
     let full_path = fixture.ms_root.join(relative_path);

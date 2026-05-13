@@ -12,7 +12,7 @@ struct GraphFixture {
 
 impl GraphFixture {
     fn setup(_name: &str) -> Self {
-        let root = tempfile::tempdir().unwrap().into_path();
+        let root = tempfile::tempdir().unwrap().keep();
         let ms_root = root.join(".ms");
 
         // Create the .ms directory structure
@@ -53,7 +53,7 @@ impl GraphFixture {
         let mut all_args = vec!["--robot", "graph", subcommand];
         all_args.extend_from_slice(args);
 
-        std::process::Command::new("./target/debug/ms")
+        std::process::Command::new(assert_cmd::cargo_bin!("ms"))
             .args(&all_args)
             .env("MS_ROOT", self.ms_root.to_str().unwrap())
             .output()
@@ -131,7 +131,10 @@ fn graph_export_json_format() {
     assert_success(&output, "export");
 
     let json = parse_json(&output);
-    assert!(json.get("nodes").is_some() || json.get("data").is_some(), "export should contain graph data");
+    assert!(
+        json.get("nodes").is_some() || json.get("data").is_some(),
+        "export should contain graph data"
+    );
 }
 
 #[test]
@@ -141,7 +144,10 @@ fn graph_export_dot_format() {
     assert_success(&output, "export dot");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("digraph"), "DOT output should contain 'digraph'");
+    assert!(
+        stdout.contains("digraph"),
+        "DOT output should contain 'digraph'"
+    );
 }
 
 #[test]
@@ -151,7 +157,10 @@ fn graph_export_mermaid_format() {
     assert_success(&output, "export mermaid");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("graph"), "Mermaid output should contain 'graph'");
+    assert!(
+        stdout.contains("graph"),
+        "Mermaid output should contain 'graph'"
+    );
 }
 
 #[test]
@@ -161,7 +170,10 @@ fn graph_cycles_returns_valid_json() {
     assert_success(&output, "cycles");
 
     let json = parse_json(&output);
-    assert!(json.get("cycles").is_some() || json.get("count").is_some(), "cycles should contain cycles or count");
+    assert!(
+        json.get("cycles").is_some() || json.get("count").is_some(),
+        "cycles should contain cycles or count"
+    );
 }
 
 #[test]
@@ -171,7 +183,10 @@ fn graph_keystones_returns_valid_json() {
     assert_success(&output, "keystones");
 
     let json = parse_json(&output);
-    assert!(json.get("items").is_some() || json.get("count").is_some(), "keystones should contain items or count");
+    assert!(
+        json.get("items").is_some() || json.get("count").is_some(),
+        "keystones should contain items or count"
+    );
 }
 
 #[test]
@@ -181,7 +196,10 @@ fn graph_bottlenecks_returns_valid_json() {
     assert_success(&output, "bottlenecks");
 
     let json = parse_json(&output);
-    assert!(json.get("items").is_some() || json.get("count").is_some(), "bottlenecks should contain items or count");
+    assert!(
+        json.get("items").is_some() || json.get("count").is_some(),
+        "bottlenecks should contain items or count"
+    );
 }
 
 #[test]

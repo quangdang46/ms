@@ -70,7 +70,13 @@ fn graph_engine_two_node_chain() {
     // Edge direction: blocker -> dependent
     let a_idx = graph.node_idx("a").unwrap();
     let b_idx = graph.node_idx("b").unwrap();
-    assert!(graph.edge_count() > 0, "Should have at least one edge");
+    // b -> a (b blocks a, since a depends on b)
+    // b has out_degree 1 (points to dependent a)
+    assert_eq!(graph.out_degree(b_idx), 1, "b should have one dependent");
+    // a has in_degree 1 (has one blocker: b)
+    assert_eq!(graph.in_degree(a_idx), 1, "a should have one blocker");
+    // b should have no blockers (in_degree 0)
+    assert_eq!(graph.in_degree(b_idx), 0, "b should have no blockers");
 }
 
 #[test]
@@ -87,15 +93,15 @@ fn graph_engine_diamond() {
     ];
     let graph = build_graph(&issues);
     assert_eq!(graph.node_count(), 4);
-    assert!(graph.edge_count() >= 3, "Diamond should have at least 3 edges");
+    assert!(
+        graph.edge_count() >= 3,
+        "Diamond should have at least 3 edges"
+    );
 }
 
 #[test]
 fn graph_engine_json_roundtrip() {
-    let issues = vec![
-        issue_with_deps("a", vec!["b"]),
-        sample_issue("b"),
-    ];
+    let issues = vec![issue_with_deps("a", vec!["b"]), sample_issue("b")];
     let graph = build_graph(&issues);
     let json = graph.to_json();
     let restored = ms::graph::engine::graph::DiGraph::from_json(&json).unwrap();

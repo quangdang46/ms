@@ -27,7 +27,7 @@ pub enum GraphCommand {
     Export(GraphExportArgs),
     /// Show detected cycles
     Cycles(GraphCyclesArgs),
-    /// Show top keystone skills (PageRank)
+    /// Show top keystone skills by critical path
     Keystones(GraphTopArgs),
     /// Show top bottleneck skills (betweenness)
     Bottlenecks(GraphTopArgs),
@@ -89,9 +89,7 @@ pub fn run(ctx: &AppContext, args: &GraphArgs) -> Result<()> {
         GraphCommand::Export(export) => run_export(ctx, &engine, export),
         GraphCommand::Cycles(cycles) => run_cycles(ctx, &engine, cycles),
         GraphCommand::Keystones(top) => run_top(ctx, &engine, &name_map, top, "Keystones"),
-        GraphCommand::Bottlenecks(top) => {
-            run_top(ctx, &engine, &name_map, top, "Bottlenecks")
-        }
+        GraphCommand::Bottlenecks(top) => run_top(ctx, &engine, &name_map, top, "Bottlenecks"),
         GraphCommand::Health(_) => run_health(ctx, &engine),
     };
     debug!(target: "graph", stage = "render_complete");
@@ -191,11 +189,7 @@ fn run_triage(ctx: &AppContext, engine: &AnalysisEngine) -> Result<()> {
     Ok(())
 }
 
-fn run_export(
-    ctx: &AppContext,
-    engine: &AnalysisEngine,
-    args: &GraphExportArgs,
-) -> Result<()> {
+fn run_export(ctx: &AppContext, engine: &AnalysisEngine, args: &GraphExportArgs) -> Result<()> {
     use crate::graph::export;
 
     let output = match args.format.as_str() {
@@ -217,11 +211,7 @@ fn run_export(
     Ok(())
 }
 
-fn run_cycles(
-    ctx: &AppContext,
-    engine: &AnalysisEngine,
-    args: &GraphCyclesArgs,
-) -> Result<()> {
+fn run_cycles(ctx: &AppContext, engine: &AnalysisEngine, args: &GraphCyclesArgs) -> Result<()> {
     let insights = engine.generate_insights(10);
     let cycles: Vec<serde_json::Value> = insights
         .cycles

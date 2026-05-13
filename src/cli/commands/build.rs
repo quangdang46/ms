@@ -372,10 +372,6 @@ pub struct BuildArgs {
     #[arg(long)]
     pub from_cass: Option<String>,
 
-    #[arg(long)]
-
-    #[arg(long, default_value = "true")]
-
     /// Interactive guided build using Brenner Method
     #[arg(long)]
     pub guided: bool,
@@ -491,7 +487,6 @@ impl CmBuildContext {
     }
 }
 
-
 pub fn run(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
     debug!(target: "build", mode = ?ctx.output_format, "output mode selected");
 
@@ -560,8 +555,6 @@ pub fn run(ctx: &AppContext, args: &BuildArgs) -> Result<()> {
         None
     };
 
-
-
     // Handle resume
     if let Some(ref session_id) = args.resume {
         return run_resume(ctx, args, session_id);
@@ -591,7 +584,7 @@ fn run_guided(
     ctx: &AppContext,
     args: &BuildArgs,
     cm_context: Option<&CmBuildContext>,
-    ) -> Result<()> {
+) -> Result<()> {
     let query = args
         .from_cass
         .clone()
@@ -687,7 +680,6 @@ fn run_guided(
             println!("  Skill: {}", skill_path.display());
             println!("  Manifest: {}", manifest_path.display());
             println!("  Calibration: {}", calibration_path.display());
-
         }
         WizardOutput::Cancelled {
             reason,
@@ -709,7 +701,7 @@ fn run_auto(
     ctx: &AppContext,
     args: &BuildArgs,
     cm_context: Option<&CmBuildContext>,
-        query_override: Option<&str>,
+    query_override: Option<&str>,
 ) -> Result<()> {
     use crate::cass::QualityConfig;
     use crate::cass::mining::{ExtractedPattern, extract_from_session};
@@ -1258,7 +1250,7 @@ fn run_interactive_build(
     ctx: &AppContext,
     args: &BuildArgs,
     cm_context: Option<&CmBuildContext>,
-    ) -> Result<()> {
+) -> Result<()> {
     if ctx.output_format != OutputFormat::Human {
         let output = json!({
             "error": true,
@@ -1302,11 +1294,7 @@ fn run_interactive_build(
 }
 
 /// Resume a previous build session
-fn run_resume(
-    ctx: &AppContext,
-    args: &BuildArgs,
-    session_id: &str,
-    ) -> Result<()> {
+fn run_resume(ctx: &AppContext, args: &BuildArgs, session_id: &str) -> Result<()> {
     use crate::core::recovery::Checkpoint;
 
     // Try to load checkpoint
@@ -2302,7 +2290,6 @@ mod tests {
         assert_eq!(restored.patterns_extracted, state.patterns_extracted);
         assert_eq!(restored.patterns_filtered, state.patterns_filtered);
     }
-
 
     #[test]
     fn test_build_phase_serialization() {

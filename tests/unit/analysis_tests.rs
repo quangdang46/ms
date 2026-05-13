@@ -182,9 +182,15 @@ fn insights_chain_finds_keystones() {
     let engine = AnalysisEngine::new(&issues);
     let insights = engine.generate_insights(5);
 
-    assert!(!insights.keystones.is_empty(), "Chain should have keystones");
+    assert!(
+        !insights.keystones.is_empty(),
+        "Chain should have keystones"
+    );
     let keystone_ids: Vec<&str> = insights.keystones.iter().map(|k| k.id.as_str()).collect();
-    assert!(keystone_ids.contains(&"s0"), "Root of chain should be a keystone");
+    assert!(
+        keystone_ids.contains(&"s0"),
+        "Root of chain should be a keystone"
+    );
 }
 
 #[test]
@@ -214,10 +220,7 @@ fn triage_empty() {
 
 #[test]
 fn triage_with_issues() {
-    let issues = vec![
-        issue_with_deps("a", vec!["b"]),
-        sample_issue("b"),
-    ];
+    let issues = vec![issue_with_deps("a", vec!["b"]), sample_issue("b")];
     let engine = AnalysisEngine::new(&issues);
     let triage = engine.compute_triage();
 
@@ -245,7 +248,10 @@ fn plan_chain_produces_tracks() {
     let engine = AnalysisEngine::new(&issues);
     let plan = engine.generate_plan();
 
-    assert!(!plan.tracks.is_empty(), "Chain should produce at least one track");
+    assert!(
+        !plan.tracks.is_empty(),
+        "Chain should produce at least one track"
+    );
 }
 
 // ============================================================================
@@ -254,10 +260,7 @@ fn plan_chain_produces_tracks() {
 
 #[test]
 fn health_label_distribution() {
-    let issues = vec![
-        sample_issue("a"),
-        sample_issue("b"),
-    ];
+    let issues = vec![sample_issue("a"), sample_issue("b")];
     let engine = AnalysisEngine::new(&issues);
     let health = engine.compute_label_health();
 
@@ -270,10 +273,7 @@ fn health_label_distribution() {
 
 #[test]
 fn cycle_detection_no_cycles() {
-    let issues = vec![
-        issue_with_deps("a", vec!["b"]),
-        sample_issue("b"),
-    ];
+    let issues = vec![issue_with_deps("a", vec!["b"]), sample_issue("b")];
     let engine = AnalysisEngine::new(&issues);
     assert!(!engine.has_cycles());
 }

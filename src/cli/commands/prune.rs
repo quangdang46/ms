@@ -569,7 +569,6 @@ fn run_proposals(ctx: &AppContext, args: &AnalyzeArgs, dry_run: bool) -> Result<
         }
     }
 
-
     emit_human(layout);
     Ok(())
 }

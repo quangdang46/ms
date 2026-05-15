@@ -82,10 +82,18 @@ fn init_tracing(cli: &Cli) {
         return;
     }
 
+    // Default to WARN across the board so interactive `ms` commands don't
+    // spam stderr with INFO lines from `ms::storage::tx`, tantivy's file
+    // watcher, etc. Verbosity flags lift specific modules:
+    //   (no flag)  -> warn everywhere
+    //   -v         -> ms at info, others at warn
+    //   -vv        -> ms at debug, others at info
+    //   -vvv       -> trace everywhere
+    // RUST_LOG still wins if set, so power users can override per-crate.
     let filter = match cli.verbose {
-        0 => "warn,ms=info",
-        1 => "info,ms=debug",
-        2 => "debug,ms=trace",
+        0 => "warn",
+        1 => "warn,ms=info",
+        2 => "info,ms=debug",
         _ => "trace",
     };
 

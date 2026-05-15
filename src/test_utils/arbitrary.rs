@@ -265,7 +265,7 @@ fn arb_acip() -> impl Strategy<Value = AcipConfig> {
             |(enabled, version, prompt_path, audit_mode, trust)| AcipConfig {
                 enabled,
                 version,
-                prompt_path: PathBuf::from(prompt_path),
+                prompt_path: Some(PathBuf::from(prompt_path)),
                 audit_mode,
                 trust,
             },

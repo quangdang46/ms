@@ -43,6 +43,13 @@ pub fn run(ctx: &AppContext, args: &SyncArgs) -> Result<()> {
         return status(ctx, args);
     }
 
+    // Friendly handling for `ms sync status` — without this, "status" is
+    // parsed as a remote name and the user gets `remote not found: status`.
+    // Same pattern as `ms config show` -> `--list`.
+    if args.remote.as_deref() == Some("status") {
+        return status(ctx, args);
+    }
+
     let config = SyncConfig::load()?;
     let machine = MachineIdentity::load_or_generate_with_name(
         config.machine.name.clone(),

@@ -270,7 +270,7 @@ impl Config {
             self.security.acip.version = value;
         }
         if let Some(value) = env_string("MS_SECURITY_ACIP_PROMPT_PATH") {
-            self.security.acip.prompt_path = PathBuf::from(value);
+            self.security.acip.prompt_path = Some(PathBuf::from(value));
         }
         if let Some(value) = env_bool("MS_SECURITY_ACIP_AUDIT_MODE")? {
             self.security.acip.audit_mode = value;
@@ -1155,7 +1155,7 @@ impl AcipConfig {
             self.version = value;
         }
         if let Some(value) = patch.prompt_path {
-            self.prompt_path = value;
+            self.prompt_path = Some(value);
         }
         if let Some(value) = patch.audit_mode {
             self.audit_mode = value;

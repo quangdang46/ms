@@ -180,7 +180,7 @@ pub fn run(ctx: &AppContext, args: &SecurityArgs) -> Result<()> {
 
 fn status(ctx: &AppContext) -> Result<()> {
     let cfg = &ctx.config.security.acip;
-    let detected = prompt_version(&cfg.prompt_path).ok().flatten();
+    let detected = prompt_version(cfg.prompt_path.as_deref()).ok().flatten();
     debug!(target: "security", acip_status = cfg.enabled, "ACIP status");
     let (ok, error) = if cfg.enabled {
         match AcipEngine::load(cfg.clone()) {
@@ -197,7 +197,11 @@ fn status(ctx: &AppContext) -> Result<()> {
         acip_version: cfg.version.clone(),
         detected_version: detected,
         audit_mode: cfg.audit_mode,
-        prompt_path: cfg.prompt_path.display().to_string(),
+        prompt_path: cfg
+            .prompt_path
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "<embedded default>".to_string()),
         error,
     };
 
@@ -210,7 +214,7 @@ fn config(ctx: &AppContext) -> Result<()> {
 
 fn version(ctx: &AppContext) -> Result<()> {
     let cfg = &ctx.config.security.acip;
-    let detected = prompt_version(&cfg.prompt_path).ok().flatten();
+    let detected = prompt_version(cfg.prompt_path.as_deref()).ok().flatten();
     let payload = VersionOutput {
         configured: cfg.version.clone(),
         detected,

@@ -315,7 +315,26 @@ fn output_human(
             continue;
         }
 
-        layout.push_line(format!("{} {}", style("✗").red(), style(&path_str).bold()));
+        // Pick a per-file marker based on the worst severity present, so a
+        // file with only info-level findings doesn't render with the same
+        // alarming red ✗ as a file with real errors.
+        let worst = file_result
+            .result
+            .diagnostics
+            .iter()
+            .map(|d| d.severity)
+            .max_by_key(|s| match s {
+                Severity::Error => 3,
+                Severity::Warning => 2,
+                Severity::Info => 1,
+            })
+            .unwrap_or(Severity::Info);
+        let file_marker = match worst {
+            Severity::Error => style("✗").red(),
+            Severity::Warning => style("!").yellow(),
+            Severity::Info => style("ℹ").blue(),
+        };
+        layout.push_line(format!("{} {}", file_marker, style(&path_str).bold()));
 
         for diag in &file_result.result.diagnostics {
             let severity_icon = match diag.severity {

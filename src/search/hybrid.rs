@@ -28,6 +28,12 @@ pub struct RrfConfig {
     pub bm25_weight: f32,
     /// Weight for semantic (vector) results
     pub semantic_weight: f32,
+    /// When true (default), divide every fused score by the maximum score
+    /// so the top result is 1.0 and others scale proportionally. Without
+    /// this, raw RRF scores live in the ~0.01–0.03 range with k=60, which
+    /// looks identical to humans even when the underlying ranks differ.
+    /// Disable when you need to compare scores across queries.
+    pub normalize: bool,
 }
 
 impl Default for RrfConfig {
@@ -36,6 +42,7 @@ impl Default for RrfConfig {
             k: 60.0,
             bm25_weight: 1.0,
             semantic_weight: 1.0,
+            normalize: true,
         }
     }
 }
@@ -58,6 +65,13 @@ impl RrfConfig {
             semantic_weight,
             ..Default::default()
         }
+    }
+
+    /// Disable score normalization (return raw RRF scores).
+    #[must_use]
+    pub const fn raw_scores(mut self) -> Self {
+        self.normalize = false;
+        self
     }
 }
 
@@ -151,6 +165,21 @@ pub fn fuse_results(
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+
+    // Normalize scores so the top result is 1.0 and others scale
+    // proportionally. Raw RRF scores with k=60 cluster around 0.01–0.03
+    // which looks identical to users in `[score]` display badges even
+    // when the underlying ranks differ meaningfully. This is a display-
+    // only change: the relative ordering and ratios are preserved.
+    if config.normalize {
+        if let Some(max) = results.first().map(|r| r.score) {
+            if max > 0.0 {
+                for r in &mut results {
+                    r.score /= max;
+                }
+            }
+        }
+    }
 
     results
 }
@@ -274,7 +303,7 @@ mod tests {
 
     #[test]
     fn test_rrf_score_calculation() {
-        let config = RrfConfig::with_k(60.0);
+        let config = RrfConfig::with_k(60.0).raw_scores();
 
         let bm25 = vec![("skill-1".to_string(), 5.0)];
         let semantic = vec![("skill-1".to_string(), 0.9)];
@@ -284,6 +313,29 @@ mod tests {
         // RRF score = 1/(60+1) + 1/(60+1) = 2/61 ≈ 0.0328
         let expected_score = 2.0 / 61.0;
         assert!((results[0].score - expected_score).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_score_normalization_default() {
+        // Default config normalizes: top result is 1.0, others scale down.
+        let config = RrfConfig::default();
+        let bm25 = vec![
+            ("a".to_string(), 5.0),
+            ("b".to_string(), 4.0),
+            ("c".to_string(), 3.0),
+        ];
+        let semantic = vec![
+            ("a".to_string(), 0.9),
+            ("b".to_string(), 0.5),
+        ];
+        let results = fuse_results(&bm25, &semantic, &config);
+        assert!((results[0].score - 1.0).abs() < 0.0001);
+        // Subsequent results should be strictly less than 1.0 and visually
+        // distinguishable (more than 0.001 apart from each other).
+        for window in results.windows(2) {
+            assert!(window[0].score >= window[1].score);
+        }
+        assert!(results[0].score > results[1].score);
     }
 
     #[test]

@@ -592,7 +592,7 @@ fn define_tools() -> Vec<Tool> {
         },
         Tool {
             name: "feedback".to_string(),
-            description: "Record feedback for a skill (helpful/not helpful)".to_string(),
+            description: "Record feedback for a skill. `helpful: true` corresponds to the CLI's `--positive` / `--helpful` flag; `helpful: false` corresponds to `--negative` / `--not-helpful`.".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -602,7 +602,7 @@ fn define_tools() -> Vec<Tool> {
                     },
                     "helpful": {
                         "type": "boolean",
-                        "description": "Whether the skill was helpful"
+                        "description": "true => positive (CLI: --positive / --helpful), false => negative (CLI: --negative / --not-helpful)"
                     },
                     "comment": {
                         "type": "string",

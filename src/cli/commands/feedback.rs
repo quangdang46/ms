@@ -29,12 +29,12 @@ pub struct FeedbackAddArgs {
     /// Skill ID or name
     pub skill: String,
 
-    /// Mark as positive feedback
-    #[arg(long)]
+    /// Mark as positive feedback (alias: --helpful)
+    #[arg(long, alias = "helpful")]
     pub positive: bool,
 
-    /// Mark as negative feedback
-    #[arg(long)]
+    /// Mark as negative feedback (alias: --not-helpful)
+    #[arg(long, alias = "not-helpful")]
     pub negative: bool,
 
     /// Numeric rating (1-5)

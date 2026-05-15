@@ -37,6 +37,10 @@ struct RequirementCheck {
     required: bool,
     present: bool,
     error: Option<String>,
+    /// Short hint shown when the binary is missing, pointing the user at
+    /// the upstream install command. Surfaced in human output and the JSON
+    /// payload so agents can act on it programmatically.
+    install_hint: Option<String>,
 }
 
 impl RequirementCheck {
@@ -49,7 +53,13 @@ impl RequirementCheck {
             required,
             present: false,
             error: None,
+            install_hint: None,
         }
+    }
+
+    fn with_hint(mut self, hint: &str) -> Self {
+        self.install_hint = Some(hint.to_string());
+        self
     }
 
     fn check(&mut self) {
@@ -93,8 +103,16 @@ pub fn run(ctx: &AppContext, args: &RequirementsArgs) -> Result<()> {
 
     let mut checks = vec![
         RequirementCheck::new("Git Version Control", "git", true),
-        RequirementCheck::new("CASS (Context Aware Semantic Search)", "cass", false),
-        RequirementCheck::new("Beads Issue Tracker", "bd", false),
+        RequirementCheck::new("CASS (Context Aware Semantic Search)", "cass", false)
+            .with_hint("Optional. Used by `ms build --from-cass` and `ms cross-project`. See https://github.com/quangdang46/cass"),
+        RequirementCheck::new("Beads Issue Tracker", "bd", false)
+            .with_hint("Optional. Used by `ms graph` integrations. Install via `cargo install --git https://github.com/quangdang46/beads_rust`"),
+        RequirementCheck::new("bv (Beads Viewer)", "bv", false)
+            .with_hint("Optional. Powers `ms graph insights/plan/cycles/...`. Install via `cargo install --git https://github.com/quangdang46/beads_viewer`"),
+        RequirementCheck::new("DCG (Destructive Command Guard)", "dcg", false)
+            .with_hint("Optional. Powers `ms safety check`. When missing, ms still runs but `ms safety` reports unavailable."),
+        RequirementCheck::new("cm (Cass Memory)", "cm", false)
+            .with_hint("Optional. Powers `ms cm` subcommands. When missing, those commands report 'CM not available'."),
         RequirementCheck::new("Ripgrep", "rg", false),
         RequirementCheck::new("Tar Archiver", "tar", true),
     ];
@@ -138,8 +156,15 @@ pub fn run(ctx: &AppContext, args: &RequirementsArgs) -> Result<()> {
         println!("{} {} {}", status, check.name.bold(), version_str);
         println!("    Bin:  {}", check.bin.cyan());
         println!("    Path: {path_str}");
-        if !check.present && !check.required {
-            println!("    Note: Optional dependency");
+        if !check.present {
+            if check.required {
+                println!("    Note: REQUIRED");
+            } else {
+                println!("    Note: Optional dependency");
+            }
+            if let Some(hint) = &check.install_hint {
+                println!("    Hint: {hint}");
+            }
         }
         println!();
     }

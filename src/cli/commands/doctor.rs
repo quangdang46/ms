@@ -387,28 +387,27 @@ fn check_security(ctx: &AppContext, verbose: bool) -> Result<usize> {
 
     // 2. Check ACIP prompt availability
     say_inline!(ctx, "  [2/5] ACIP prompt... ");
-    let acip_path = &ctx.config.security.acip.prompt_path;
-    if acip_path.exists() {
-        match crate::security::acip::prompt_version(acip_path) {
-            Ok(Some(version)) => {
-                say!(ctx, "{} v{}", "[ok]", version);
-                if verbose {
-                    say!(ctx, "        Path: {}", acip_path.display());
-                }
-            }
-            Ok(None) => {
-                say!(ctx, "{} no version detected", "[!]");
-                issues += 1;
-            }
-            Err(e) => {
-                say!(ctx, "{} error: {}", "[FAIL]", e);
-                issues += 1;
+    let acip_path = ctx.config.security.acip.prompt_path.as_deref();
+    match crate::security::acip::prompt_version(acip_path) {
+        Ok(Some(version)) => {
+            say!(ctx, "{} v{}", "[ok]", version);
+            if verbose {
+                say!(
+                    ctx,
+                    "        Path: {}",
+                    acip_path
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|| "<embedded default>".to_string())
+                );
             }
         }
-    } else {
-        say!(ctx, "{} not found", "-");
-        if verbose {
-            say!(ctx, "        Expected: {}", acip_path.display());
+        Ok(None) => {
+            say!(ctx, "{} no version detected", "[!]");
+            issues += 1;
+        }
+        Err(e) => {
+            say!(ctx, "{} error: {}", "[FAIL]", e);
+            issues += 1;
         }
     }
 

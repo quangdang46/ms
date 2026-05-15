@@ -11,6 +11,11 @@ use crate::error::{MsError, Result};
 
 const ACIP_AUDIT_TAG: &str = "ACIP_AUDIT_MODE=ENABLED";
 
+/// Embedded default ACIP prompt. Distributed inside the binary so that
+/// `ms security` works on a fresh install with no external prompt file.
+/// Operators can override by setting `security.acip.prompt_path`.
+const ACIP_DEFAULT_PROMPT: &str = include_str!("acip_default_prompt.md");
+
 static DISALLOWED_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
         Regex::new("(?i)ignore(?:\\s+(?:all|any|previous))*\\s+instructions")
@@ -88,7 +93,12 @@ impl TrustBoundaryConfig {
 pub struct AcipConfig {
     pub enabled: bool,
     pub version: String,
-    pub prompt_path: PathBuf,
+    /// Optional override path for the ACIP prompt. When None or when the
+    /// file does not exist, ms falls back to the embedded default prompt
+    /// distributed with the binary. This means `ms security` works on
+    /// a clean install without any extra setup.
+    #[serde(default)]
+    pub prompt_path: Option<PathBuf>,
     pub audit_mode: bool,
     pub trust: TrustBoundaryConfig,
 }
@@ -98,7 +108,7 @@ impl Default for AcipConfig {
         Self {
             enabled: true,
             version: "1.3".to_string(),
-            prompt_path: PathBuf::from("/data/projects/acip/ACIP_v_1.3_Full_Text.md"),
+            prompt_path: None,
             audit_mode: false,
             trust: TrustBoundaryConfig::default(),
         }
@@ -142,7 +152,7 @@ impl AcipEngine {
         if !config.enabled {
             return Err(MsError::AcipError("ACIP disabled in config".to_string()));
         }
-        let prompt = load_prompt(&config.prompt_path)?;
+        let prompt = load_prompt(config.prompt_path.as_deref())?;
         let detected = detect_version(&prompt)
             .ok_or_else(|| MsError::AcipError("ACIP_VERSION_MISMATCH: unable to detect".into()))?;
         if detected != config.version {
@@ -206,21 +216,30 @@ pub fn build_quarantine_record(
     }
 }
 
-pub fn prompt_version(path: &Path) -> Result<Option<String>> {
+pub fn prompt_version(path: Option<&Path>) -> Result<Option<String>> {
     let raw = load_prompt(path)?;
     Ok(detect_version(&raw))
 }
 
-fn load_prompt(path: &Path) -> Result<String> {
-    if !path.exists() {
+/// Load the ACIP prompt. If `path` is provided and the file exists, read it.
+/// Otherwise fall back to the embedded default prompt distributed with the
+/// binary so ACIP works on clean installs without any per-machine setup.
+fn load_prompt(path: Option<&Path>) -> Result<String> {
+    if let Some(p) = path {
+        if p.exists() {
+            return std::fs::read_to_string(p).map_err(|err| {
+                MsError::AcipError(format!("ACIP_PROMPT_READ_FAILED: {}: {err}", p.display()))
+            });
+        }
+        // Caller explicitly configured a path that doesn't exist: return a
+        // clear error rather than silently falling back, so misconfigured
+        // overrides don't go unnoticed.
         return Err(MsError::AcipError(format!(
-            "ACIP_PROMPT_MISSING: {}",
-            path.display()
+            "ACIP_PROMPT_MISSING: configured prompt_path does not exist: {}",
+            p.display()
         )));
     }
-    let raw = std::fs::read_to_string(path)
-        .map_err(|err| MsError::AcipError(format!("ACIP_PROMPT_MISSING: {err}")))?;
-    Ok(raw)
+    Ok(ACIP_DEFAULT_PROMPT.to_string())
 }
 
 fn detect_version(prompt: &str) -> Option<String> {

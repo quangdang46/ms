@@ -506,7 +506,8 @@ fn run_install(ctx: &AppContext, args: &BundleInstallArgs) -> Result<()> {
     let report = if args.no_verify {
         let options = crate::bundler::InstallOptions::<
             crate::bundler::manifest::NoopSignatureVerifier,
-        >::allow_unsigned();
+        >::allow_unsigned()
+        .with_force(args.force);
         crate::bundler::install_with_options(&package, ctx.git.root(), &only, &options)?
     } else if package.manifest.signatures.is_empty() {
         // Unsigned bundle: allow but warn (development/testing scenario)
@@ -519,7 +520,8 @@ fn run_install(ctx: &AppContext, args: &BundleInstallArgs) -> Result<()> {
         }
         let options = crate::bundler::InstallOptions::<
             crate::bundler::manifest::NoopSignatureVerifier,
-        >::allow_unsigned();
+        >::allow_unsigned()
+        .with_force(args.force);
         crate::bundler::install_with_options(&package, ctx.git.root(), &only, &options)?
     } else {
         // Signed bundle: require verification

@@ -38,6 +38,16 @@ pub fn run(ctx: &AppContext, args: &ConfigArgs) -> Result<()> {
         return emit_config(&ctx);
     }
 
+    // Friendly handling for users who type `ms config show` thinking it's
+    // a subcommand. The clap signature is `ms config [KEY] [VALUE]`, so
+    // "show" is parsed as a config key and produces the opaque error
+    // `unknown key: show`. Steer them to `--list`.
+    if let Some(key) = args.key.as_deref() {
+        if matches!(key, "show" | "list" | "ls" | "dump") && args.value.is_none() {
+            return emit_config(&ctx);
+        }
+    }
+
     if args.unset && args.value.is_some() {
         return Err(crate::error::MsError::Config(
             "cannot use --unset with a value".to_string(),

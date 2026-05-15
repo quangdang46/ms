@@ -193,6 +193,37 @@ pub(crate) fn resolve_skill_markdown(ctx: &AppContext, input: &str) -> Result<Pa
         }
     }
 
+    // Fall back to the skill database. `ms validate`/`lint`/`quality`/`diff`
+    // historically only accepted filesystem paths, but `ms show`/`load` accept
+    // skill IDs (and provider/skill canonical IDs). Make the analysis commands
+    // consistent: try the DB by exact id, then by alias.
+    let candidates_from_db: Vec<String> = {
+        let mut v = Vec::new();
+        if let Ok(Some(skill)) = ctx.db.get_skill(input) {
+            v.push(skill.source_path);
+        } else if let Ok(Some(alias)) = ctx.db.resolve_alias(input) {
+            if let Ok(Some(skill)) = ctx.db.get_skill(&alias.canonical_id) {
+                v.push(skill.source_path);
+            }
+        }
+        v
+    };
+    for path_str in candidates_from_db {
+        if path_str.is_empty() {
+            continue;
+        }
+        let p = PathBuf::from(&path_str);
+        if p.is_file() {
+            return Ok(p);
+        }
+        // source_path may point at the skill directory rather than SKILL.md
+        // for some import paths; try both.
+        let skill_md = p.join("SKILL.md");
+        if skill_md.is_file() {
+            return Ok(skill_md);
+        }
+    }
+
     Err(crate::error::MsError::SkillNotFound(format!(
         "skill not found: {input}"
     )))

@@ -88,9 +88,57 @@ pub fn parse_markdown(content: &str) -> Result<SkillSpec> {
             continue;
         }
 
+        // Track fenced code-block boundaries FIRST, before any heading
+        // detection. Otherwise lines like `# Styled output` inside a bash
+        // code block get parsed as markdown H1 headings, which silently
+        // hijacks the skill name/id.
+        if line.trim_start().starts_with("```") {
+            if in_code_block {
+                // Closing fence
+                code_lines.push(line.to_string());
+                let content = code_lines.join("\n");
+                code_lines.clear();
+                in_code_block = false;
+                if let Some(section) = current_section.as_mut() {
+                    flush_paragraph(section, &mut paragraph_lines);
+                    section.blocks.push(SkillBlock {
+                        id: format!("{}-block-{}", section.id, section.blocks.len() + 1),
+                        block_type: BlockType::Code,
+                        content,
+                    });
+                }
+                // If there's no current section yet (code block in the
+                // description area), we deliberately drop the code-block
+                // body — it is part of the prose preamble, not an
+                // addressable section block.
+            } else {
+                // Opening fence
+                if let Some(section) = current_section.as_mut() {
+                    flush_paragraph(section, &mut paragraph_lines);
+                }
+                in_code_block = true;
+                code_lines.push(line.to_string());
+            }
+            continue;
+        }
+
+        // Inside a code block: never interpret content as headings,
+        // descriptions, or paragraphs — just buffer it for the eventual
+        // closing fence.
+        if in_code_block {
+            code_lines.push(line.to_string());
+            continue;
+        }
+
         if let Some(title) = line.strip_prefix("# ") {
-            name = title.trim().to_string();
-            in_description = true;
+            // Only the first H1 in a document defines the skill name.
+            // Re-using `# ...` lines as section dividers downstream is rare
+            // but we keep the first one to avoid late-document headings
+            // (or repeated H1s) hijacking the skill id.
+            if name.is_empty() {
+                name = title.trim().to_string();
+                in_description = true;
+            }
             continue;
         }
 
@@ -125,31 +173,6 @@ pub fn parse_markdown(content: &str) -> Result<SkillSpec> {
             continue;
         };
 
-        if line.trim_start().starts_with("```") {
-            if in_code_block {
-                code_lines.push(line.to_string());
-                let content = code_lines.join("\n");
-                code_lines.clear();
-                in_code_block = false;
-                flush_paragraph(section, &mut paragraph_lines);
-                section.blocks.push(SkillBlock {
-                    id: format!("{}-block-{}", section.id, section.blocks.len() + 1),
-                    block_type: BlockType::Code,
-                    content,
-                });
-            } else {
-                flush_paragraph(section, &mut paragraph_lines);
-                in_code_block = true;
-                code_lines.push(line.to_string());
-            }
-            continue;
-        }
-
-        if in_code_block {
-            code_lines.push(line.to_string());
-            continue;
-        }
-
         if line.trim().is_empty() {
             flush_paragraph(section, &mut paragraph_lines);
         } else {
@@ -176,6 +199,12 @@ pub fn parse_markdown(content: &str) -> Result<SkillSpec> {
 
     let id = if !metadata.id.is_empty() {
         metadata.id.clone()
+    } else if !metadata.name.trim().is_empty() {
+        // Prefer the frontmatter `name` field over the H1 heading. Authors
+        // who set a `name:` slug in frontmatter (e.g. `name: building-glamorous-tuis`)
+        // expect the id to derive from that, not from the human-readable
+        // `# Building Glamorous TUIs with Charmbracelet` H1 below it.
+        slugify(&metadata.name)
     } else if name.is_empty() {
         String::new()
     } else {
@@ -312,5 +341,119 @@ mod tests {
         let parsed = parse_markdown(md).expect("parse");
         assert_eq!(parsed.metadata.name, "Tagged Skill");
         assert_eq!(parsed.metadata.tags, vec!["rust", "backend"]);
+    }
+
+    #[test]
+    fn h1_inside_code_block_does_not_hijack_skill_name() {
+        // Regression test for ms-bug-report.md §1.3: bash comments inside
+        // fenced code blocks (e.g. `# Styled output`) used to be parsed as
+        // markdown H1 headings, which silently overwrote the skill name and
+        // produced nonsense ids like `styled-output` for a skill whose
+        // frontmatter said `name: building-glamorous-tuis`.
+        let md = r#"---
+name: building-glamorous-tuis
+description: A test skill
+---
+
+# Building Glamorous TUIs with Charmbracelet
+
+## Quick Start
+
+```bash
+# Input
+NAME=$(gum input --placeholder "Your name")
+
+# Selection
+COLOR=$(gum choose "red" "green" "blue")
+
+# Styled output
+gum style --border rounded --padding "1 2" "Hello"
+```
+
+## Next Steps
+
+Done.
+"#;
+        let parsed = parse_markdown(md).expect("parse");
+        assert_eq!(parsed.metadata.id, "building-glamorous-tuis");
+        // Frontmatter `name` (the slug) wins over the H1 for id derivation,
+        // but the human-readable name still survives somewhere accessible.
+        assert_eq!(parsed.metadata.name, "building-glamorous-tuis");
+    }
+
+    #[test]
+    fn id_derives_from_frontmatter_name_not_h1() {
+        // When frontmatter only provides `name:` (no `id:`), id should come
+        // from the frontmatter name slug, NOT from the H1 heading. Authors
+        // explicitly setting `name: foo-bar` expect the id to be `foo-bar`,
+        // not `slugified-h1-text`.
+        let md = r#"---
+name: my-skill-slug
+description: x
+---
+
+# Pretty Human-Readable Title
+
+## Section
+
+content
+"#;
+        let parsed = parse_markdown(md).expect("parse");
+        assert_eq!(parsed.metadata.id, "my-skill-slug");
+    }
+
+    #[test]
+    fn id_falls_back_to_h1_when_no_frontmatter_name() {
+        let md = "# Pretty Title\n\nDescription.\n\n## Section\n\nstuff.\n";
+        let parsed = parse_markdown(md).expect("parse");
+        assert_eq!(parsed.metadata.id, "pretty-title");
+        assert_eq!(parsed.metadata.name, "Pretty Title");
+    }
+
+    #[test]
+    fn frontmatter_id_wins_over_everything() {
+        let md = r#"---
+id: explicit-id
+name: explicit-name
+---
+
+# H1 Title
+
+## Section
+
+stuff.
+"#;
+        let parsed = parse_markdown(md).expect("parse");
+        assert_eq!(parsed.metadata.id, "explicit-id");
+    }
+
+    #[test]
+    fn h2_inside_code_block_does_not_create_section() {
+        // Sibling regression: section ids from `## ...` lines inside code
+        // blocks would also leak into the section list.
+        let md = r#"---
+name: test
+---
+
+# Real H1
+
+## Real Section
+
+```bash
+## Not a section heading, just a comment
+echo hello
+```
+
+## Another Real Section
+
+content
+"#;
+        let parsed = parse_markdown(md).expect("parse");
+        let titles: Vec<&str> = parsed
+            .sections
+            .iter()
+            .map(|s| s.title.as_str())
+            .collect();
+        assert_eq!(titles, vec!["Real Section", "Another Real Section"]);
     }
 }

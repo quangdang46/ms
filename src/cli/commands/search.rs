@@ -49,6 +49,16 @@ pub struct SearchArgs {
 }
 
 pub fn run(ctx: &AppContext, args: &SearchArgs) -> Result<()> {
+    // Reject empty / whitespace-only queries up front. SQLite's FTS5 parser
+    // rejects empty MATCH expressions with `fts5: syntax error near ""`,
+    // which leaks an opaque storage-layer error to users.
+    if args.query.trim().is_empty() {
+        return Err(MsError::Config(
+            "search query is empty — provide a non-empty query string (e.g. `ms search \"error handling\"`)"
+                .to_string(),
+        ));
+    }
+
     // Build search filters
     let mut filters = SearchFilters::new();
 

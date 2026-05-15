@@ -29,6 +29,9 @@ pub struct InstallOptions<
     pub allow_unsigned: bool,
     /// Signature verifier for signed bundles. Only used when `allow_unsigned` is false.
     pub verifier: Option<&'a V>,
+    /// Overwrite existing skill directories rather than failing. Surfaced via
+    /// the `--force` / `-f` flag on `ms install`.
+    pub force: bool,
 }
 
 impl<V: SignatureVerifier> Default for InstallOptions<'_, V> {
@@ -36,6 +39,7 @@ impl<V: SignatureVerifier> Default for InstallOptions<'_, V> {
         Self {
             allow_unsigned: false,
             verifier: None,
+            force: false,
         }
     }
 }
@@ -48,6 +52,7 @@ impl<'a, V: SignatureVerifier> InstallOptions<'a, V> {
         Self {
             allow_unsigned: true,
             verifier: None,
+            force: false,
         }
     }
 
@@ -56,7 +61,15 @@ impl<'a, V: SignatureVerifier> InstallOptions<'a, V> {
         Self {
             allow_unsigned: false,
             verifier: Some(verifier),
+            force: false,
         }
+    }
+
+    /// Enable force-overwrite of existing skill directories.
+    #[must_use]
+    pub const fn with_force(mut self, force: bool) -> Self {
+        self.force = force;
+        self
     }
 }
 
@@ -124,14 +137,27 @@ pub fn install_with_options<V: SignatureVerifier>(
 
         let target = resolve_target_path(archive_root, &skill.path, &skill.name)?;
 
-        // Atomic-ish check: if directory exists, we fail.
+        // If the target already exists and --force was passed, remove it
+        // first so the atomic rename below can succeed. This intentionally
+        // applies to skills installed through any source (`ms index`,
+        // another bundle, etc.), matching the user expectation that
+        // `ms install -f` is an authoritative overwrite.
         if target.exists() {
-            // Rollback any previously installed skills in this transaction
-            rollback_install(&installed_paths);
-            return Err(MsError::ValidationFailed(format!(
-                "skill already exists at {}",
-                target.display()
-            )));
+            if options.force {
+                std::fs::remove_dir_all(&target).map_err(|err| {
+                    rollback_install(&installed_paths);
+                    MsError::Config(format!(
+                        "force-remove existing skill {}: {err}",
+                        target.display()
+                    ))
+                })?;
+            } else {
+                rollback_install(&installed_paths);
+                return Err(MsError::ValidationFailed(format!(
+                    "skill already exists at {} (use --force to overwrite)",
+                    target.display()
+                )));
+            }
         }
 
         // Try install

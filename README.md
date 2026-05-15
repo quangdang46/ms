@@ -171,8 +171,8 @@ This transforms "this skill seems useful" into measurable evidence. The bandit l
 Rather than force AI agents to parse CLI output, ms exposes a proper MCP (Model Context Protocol) server:
 
 ```bash
-ms mcp serve              # stdio transport for Claude Code
-ms mcp serve --port 8080  # HTTP transport for other integrations
+ms mcp serve                  # stdio transport for Claude Code
+ms mcp serve --tcp-port 8080  # TCP transport for other integrations
 ```
 
 The server exposes six tools that agents can call directly:
@@ -560,7 +560,7 @@ Expose skills as native tools for AI agents:
 
 ```bash
 ms mcp serve                         # Start MCP server (stdio transport)
-ms mcp serve --port 8080             # HTTP transport
+ms mcp serve --tcp-port 8080         # Start MCP server (TCP transport on 127.0.0.1:8080)
 ```
 
 ### Maintenance

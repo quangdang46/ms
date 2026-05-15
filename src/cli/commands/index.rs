@@ -11,7 +11,9 @@ use walkdir::WalkDir;
 
 use crate::app::AppContext;
 use crate::cli::output::OutputFormat;
-use crate::core::{GitSkillRepository, ResolutionCache, SkillLayer, spec_lens::parse_markdown};
+use crate::core::{
+    GitSkillRepository, ResolutionCache, SkillLayer, SkillSpec, spec_lens::parse_markdown,
+};
 use crate::error::{MsError, Result};
 use crate::storage::tx::GlobalLock;
 use crate::storage::{SkillRecord, TxManager};
@@ -497,6 +499,12 @@ fn index_skill_file(
     }
     spec.metadata.normalize_ids();
     canonicalize_non_local_references(&mut spec);
+    // Stamp the archive format so `ms providers doctor` doesn't flag this
+    // skill as having missing metadata after indexing. The provider import
+    // path already does this; the regular index pipeline must too.
+    if spec.archive_format_version.is_none() {
+        spec.archive_format_version = Some(SkillSpec::ARCHIVE_FORMAT_VERSION.to_string());
+    }
     let storage_id = spec.storage_id();
 
     // Check if already indexed (unless force)

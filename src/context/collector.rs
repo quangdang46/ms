@@ -31,6 +31,12 @@ impl Default for ContextCollectorConfig {
             scan_depth: 3,
             ignore_patterns: vec![
                 ".git".to_string(),
+                // ms's own internal state directory — surfacing ms.db, ms.lock,
+                // tantivy meta.json etc. to suggestions/MCP would (a) leak
+                // implementation detail to agents, and (b) make it look like
+                // those files are part of the user's project.
+                ".ms".to_string(),
+                ".beads".to_string(),
                 "node_modules".to_string(),
                 "target".to_string(),
                 "dist".to_string(),
@@ -185,14 +191,18 @@ impl ContextCollector {
                 continue;
             }
 
-            // Check ignore patterns
-            let path_str = entry.path().to_string_lossy();
-            if self
-                .config
-                .ignore_patterns
-                .iter()
-                .any(|p| path_str.contains(p))
-            {
+            // Check ignore patterns. Match against individual path components
+            // rather than the full path string so short patterns like `.ms`
+            // don't accidentally match unrelated files (e.g. `commands.ms`).
+            let path = entry.path();
+            let component_match = path.components().any(|c| {
+                let comp = c.as_os_str().to_string_lossy();
+                self.config
+                    .ignore_patterns
+                    .iter()
+                    .any(|p| comp.as_ref() == p.as_str())
+            });
+            if component_match {
                 continue;
             }
 

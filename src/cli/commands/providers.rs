@@ -107,6 +107,11 @@ struct ArchiveHealthReport {
     skill_count: usize,
     integrity_status: String,
     issues: Vec<String>,
+    /// Soft issues that don't block runtime use (e.g. legacy skills missing
+    /// `archive_format_version`). Surfaced separately so callers can fix them
+    /// without seeing `runtime_usable: false` for cosmetic reasons.
+    #[serde(default)]
+    warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -841,6 +846,7 @@ fn read_provider_state(ms_root: &Path, root: &Path) -> Option<StoredProviderStat
 fn archive_health_report(ctx: &AppContext) -> ArchiveHealthReport {
     let path = ctx.git.root().to_string_lossy().to_string();
     let mut issues = Vec::new();
+    let mut warnings = Vec::new();
     let skill_ids = match ctx.git.list_skill_ids() {
         Ok(ids) => ids,
         Err(err) => {
@@ -853,7 +859,13 @@ fn archive_health_report(ctx: &AppContext) -> ArchiveHealthReport {
         match ctx.git.read_skill(skill_id) {
             Ok(spec) => {
                 if spec.archive_format_version.is_none() {
-                    issues.push(format!("missing archive_format_version: {skill_id}"));
+                    // Treat missing `archive_format_version` as a non-blocking
+                    // warning. Older skills indexed before this field was
+                    // populated still load and route fine; flagging them as
+                    // hard `issues_found` makes `runtime_usable: false` even
+                    // though every other operation works. New skills written
+                    // by `ms index` always carry the field.
+                    warnings.push(format!("missing archive_format_version: {skill_id}"));
                 }
                 if let Err(err) = ctx.git.read_skill_assets(skill_id) {
                     issues.push(format!("failed to read assets for {skill_id}: {err}"));
@@ -872,6 +884,7 @@ fn archive_health_report(ctx: &AppContext) -> ArchiveHealthReport {
             "issues_found".to_string()
         },
         issues,
+        warnings,
     }
 }
 

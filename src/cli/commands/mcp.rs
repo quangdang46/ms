@@ -14,7 +14,8 @@
 //!
 //! See [`sanitize_mcp_output`] and [`validate_mcp_json`] for details.
 
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, BufReader, Write};
+use std::net::TcpListener;
 
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
@@ -709,7 +710,11 @@ fn run_serve(ctx: &AppContext, args: &ServeArgs) -> Result<()> {
     let debug = args.debug;
 
     if debug {
-        eprintln!("[ms-mcp] Starting MCP server (stdio mode)");
+        if let Some(port) = args.tcp_port {
+            eprintln!("[ms-mcp] Starting MCP server (TCP mode on 127.0.0.1:{port})");
+        } else {
+            eprintln!("[ms-mcp] Starting MCP server (stdio mode)");
+        }
         eprintln!("[ms-mcp] Server: {SERVER_NAME} v{SERVER_VERSION}");
         eprintln!("[ms-mcp] Protocol: {PROTOCOL_VERSION}");
     }
@@ -725,8 +730,103 @@ fn run_serve(ctx: &AppContext, args: &ServeArgs) -> Result<()> {
         }
     }
 
-    // Run the stdio server loop
-    run_stdio_server(ctx, debug)
+    if let Some(port) = args.tcp_port {
+        run_tcp_server(ctx, port, debug)
+    } else {
+        run_stdio_server(ctx, debug)
+    }
+}
+
+/// Run the MCP server over a TCP socket. Each accepted connection speaks the
+/// same newline-delimited JSON-RPC protocol as the stdio transport.
+///
+/// Connections are handled sequentially: agents typically open exactly one
+/// connection, and serializing requests avoids the locking complexity of
+/// concurrent SQLite/search-index access through `AppContext`.
+fn run_tcp_server(ctx: &AppContext, port: u16, debug: bool) -> Result<()> {
+    let addr = format!("127.0.0.1:{port}");
+    let listener = TcpListener::bind(&addr).map_err(|e| {
+        MsError::Config(format!("failed to bind MCP TCP listener on {addr}: {e}"))
+    })?;
+
+    if debug {
+        eprintln!("[ms-mcp] Listening on {addr}");
+    } else {
+        // Always print the bind so callers can confirm the port is open.
+        eprintln!("[ms-mcp] MCP server listening on {addr}");
+    }
+
+    for stream in listener.incoming() {
+        let stream = match stream {
+            Ok(s) => s,
+            Err(e) => {
+                if debug {
+                    eprintln!("[ms-mcp] accept error: {e}");
+                }
+                continue;
+            }
+        };
+
+        if debug {
+            if let Ok(peer) = stream.peer_addr() {
+                eprintln!("[ms-mcp] connection from {peer}");
+            }
+        }
+
+        let reader_stream = match stream.try_clone() {
+            Ok(s) => s,
+            Err(e) => {
+                if debug {
+                    eprintln!("[ms-mcp] failed to clone TCP stream: {e}");
+                }
+                continue;
+            }
+        };
+        let mut writer = stream;
+        let reader = BufReader::new(reader_stream);
+
+        for line in reader.lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(e) => {
+                    if debug {
+                        eprintln!("[ms-mcp] tcp read error: {e}");
+                    }
+                    break;
+                }
+            };
+
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            if debug {
+                eprintln!("[ms-mcp] <- {line}");
+            }
+
+            if let Some(response) = handle_request(ctx, &line, debug) {
+                let response_json = serialize_response_safe(&response);
+                if let Err(e) = validate_mcp_json(&response_json) {
+                    warn!("MCP response validation failed after sanitization: {}", e);
+                }
+                if debug {
+                    eprintln!("[ms-mcp] -> {response_json}");
+                }
+                if writeln!(writer, "{response_json}").is_err() {
+                    break;
+                }
+                let _ = writer.flush();
+            } else if debug {
+                eprintln!("[ms-mcp] -> (no response - notification)");
+            }
+        }
+
+        if debug {
+            eprintln!("[ms-mcp] connection closed");
+        }
+    }
+
+    Ok(())
 }
 
 fn run_stdio_server(ctx: &AppContext, debug: bool) -> Result<()> {

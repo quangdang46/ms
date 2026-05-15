@@ -440,6 +440,10 @@ main() {
         log "${GREEN}Installation complete! Run 'ms --help' to get started.${NC}"
     else
         warn "Binary installed but failed to run. Please check the logs."
+        warn "This is often caused by a GLIBC version mismatch on older Linux"
+        warn "distributions. Try building from source with 'cargo install --path .'"
+        warn "after cloning https://github.com/quangdang46/ms"
+        exit 1
     fi
 }
 

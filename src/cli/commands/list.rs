@@ -193,7 +193,10 @@ fn display_list(ctx: &AppContext, skills: &[SkillRecord], args: &ListArgs) -> Re
             for skill in skills {
                 println!(
                     "{}\t{}\t{}\t{}\t{:.2}\t{}\t{}",
-                    skill.id,
+                    // Match the id format used by JSON/JSONL output so that
+                    // scripts can join across formats without translating
+                    // `rust-complete` <-> `local/rust-complete`.
+                    skill_machine_id(skill),
                     skill.name,
                     skill.version.as_deref().unwrap_or("-"),
                     skill.source_layer,

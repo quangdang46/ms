@@ -165,8 +165,10 @@ pub fn run(ctx: &AppContext, args: &SuggestArgs) -> Result<()> {
     let skill_ids: Vec<String> = all_skills.iter().map(|s| s.id.clone()).collect();
     contextual_bandit.register_skills(&skill_ids);
 
-    // 7. Get recommendations from bandit
-    let fetch_limit = args.limit * 2; // Fetch extra for filtering
+    // 7. Get recommendations from bandit.
+    // Fetch a generous over-sample so we still have material left after
+    // cooldown filtering, hidden-skill filtering, and domain filtering.
+    let fetch_limit = (args.limit * 5).max(20).min(all_skills.len());
     let recommendations = contextual_bandit.recommend(&context_features, fetch_limit);
 
     // 8. Build suggestions with metadata
@@ -253,13 +255,44 @@ pub fn run(ctx: &AppContext, args: &SuggestArgs) -> Result<()> {
         });
     }
 
-    // 12. Apply cooldown filter (unless ignored)
+    // 12. Apply cooldown filter (unless ignored).
+    // Cooldowns are a soft preference, not a hard filter: if filtering would
+    // leave us with fewer suggestions than the caller asked for (common with
+    // small skill sets, e.g. fresh `ms init`), top the list back up from the
+    // cooled-down candidates so we don't return an empty result. Without this,
+    // calling `ms suggest` twice in a row on a small store produces 0 results
+    // on the second call, which looks like the command is broken.
     let fp = fingerprint.as_u64();
     if !args.ignore_cooldowns {
         use crate::suggestions::CooldownStatus;
-        suggestions
-            .retain(|s| !matches!(cache.status(fp, &s.skill_id), CooldownStatus::Active { .. }));
+        let mut fresh: Vec<Suggestion> = Vec::new();
+        let mut cooled: Vec<Suggestion> = Vec::new();
+        for s in suggestions.drain(..) {
+            if matches!(cache.status(fp, &s.skill_id), CooldownStatus::Active { .. }) {
+                cooled.push(s);
+            } else {
+                fresh.push(s);
+            }
+        }
+        if fresh.len() >= args.limit {
+            suggestions = fresh;
+        } else {
+            // Not enough fresh suggestions; fill remaining slots from cooled
+            // ones (still ordered by score).
+            suggestions = fresh;
+            for s in cooled {
+                if suggestions.len() >= args.limit {
+                    break;
+                }
+                suggestions.push(s);
+            }
+        }
     }
+
+    // Increase fetch_limit doesn't help here because step 7's bandit already
+    // returned at most `args.limit * 2` recommendations. For small skill
+    // stores that's fine; for large ones, the soft-filter above keeps the
+    // behaviour stable either way.
 
     // 13. Truncate to limit
     suggestions.truncate(args.limit);

@@ -801,7 +801,9 @@ fn score_skill(
         why.truncate(4);
     }
 
-    // Determine display_id and skill_id
+    // Determine display_id and skill_id.
+    // skill_id MUST be a slug usable by `ms load <skill_id>` — never the
+    // human-readable name. display_id is the pretty name for humans.
     let provider = meta
         .get("provider")
         .and_then(|v| v.as_str())
@@ -816,11 +818,14 @@ fn score_skill(
             if skill.id.contains('/') {
                 skill.id.clone()
             } else {
-                format!("{provider}/{}", display_id)
+                format!("{provider}/{}", skill.id)
             }
         });
     let skill_id = if provider == "local" {
-        display_id.clone()
+        // For local skills, the slug is the DB id. Avoid emitting the pretty
+        // display name as `skill_id` — agents read this field and pass it to
+        // `ms load`, so it must be the slug.
+        skill.id.clone()
     } else {
         canonical
     };

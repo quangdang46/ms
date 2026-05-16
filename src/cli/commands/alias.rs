@@ -28,9 +28,14 @@ pub enum AliasCommand {
         /// Alias name (the alternate identifier)
         alias: String,
 
-        /// Target skill ID (the canonical identifier)
+        /// Target skill ID (positional). Either provide this or `--target`.
+        #[arg(required_unless_present = "target")]
+        target_positional: Option<String>,
+
+        /// Target skill ID (the canonical identifier). Equivalent to the
+        /// positional argument.
         #[arg(long, short)]
-        target: String,
+        target: Option<String>,
 
         /// Alias type: "short", "legacy", "deprecated", "alternate"
         #[arg(long, short = 'k', default_value = "alternate")]
@@ -66,14 +71,27 @@ pub fn run(ctx: &AppContext, args: &AliasArgs) -> Result<()> {
     match &args.command {
         Some(AliasCommand::Add {
             alias,
+            target_positional,
             target,
             kind,
-        }) => add_alias(ctx, alias, target, kind),
+        }) => {
+            // Either positional or --target must resolve to a value.
+            let resolved = target
+                .clone()
+                .or_else(|| target_positional.clone())
+                .ok_or_else(|| {
+                    MsError::ValidationFailed(
+                        "alias add requires a target (positional or --target)".to_string(),
+                    )
+                })?;
+            add_alias(ctx, alias, &resolved, kind)
+        }
         Some(AliasCommand::Remove { alias }) => remove_alias(ctx, alias),
         Some(AliasCommand::Resolve { alias }) => resolve_alias(ctx, alias),
         Some(AliasCommand::List { skill }) => list_aliases(ctx, skill.as_deref()),
         None => {
-            // No subcommand - show help
+            // No subcommand - print usage and return an error so callers
+            // (CI, scripts, agents) can detect the missing subcommand.
             if ctx.output_format != OutputFormat::Human {
                 println!(
                     "{}",
@@ -83,18 +101,18 @@ pub fn run(ctx: &AppContext, args: &AliasArgs) -> Result<()> {
                     })
                 );
             } else {
-                println!("{}", "Usage: ms alias <COMMAND>".bold());
-                println!();
-                println!("Commands:");
-                println!("  add       Add an alias for a skill");
-                println!("  remove    Remove an alias");
-                println!("  resolve   Resolve an alias to its canonical skill ID");
-                println!("  list      List aliases (all or for a specific skill)");
-                println!();
-                println!("Options:");
-                println!("  -l, --list   List all aliases (shortcut for `ms alias list`)");
+                eprintln!("{}", "Usage: ms alias <COMMAND>".bold());
+                eprintln!();
+                eprintln!("Commands:");
+                eprintln!("  add       Add an alias for a skill");
+                eprintln!("  remove    Remove an alias");
+                eprintln!("  resolve   Resolve an alias to its canonical skill ID");
+                eprintln!("  list      List aliases (all or for a specific skill)");
+                eprintln!();
+                eprintln!("Options:");
+                eprintln!("  -l, --list   List all aliases (shortcut for `ms alias list`)");
             }
-            Ok(())
+            Err(MsError::Config("no alias subcommand provided".to_string()))
         }
     }
 }

@@ -87,7 +87,7 @@ fn run_show(ctx: &AppContext, args: &ShowEvidenceArgs) -> Result<()> {
     let skill = ctx
         .db
         .get_skill(&args.skill_id)?
-        .ok_or_else(|| MsError::SkillNotFound(format!("skill not found: {}", args.skill_id)))?;
+        .ok_or_else(|| MsError::SkillNotFound(args.skill_id.clone()))?;
 
     // Get evidence
     if let Some(ref rule_id) = args.rule {

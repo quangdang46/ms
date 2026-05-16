@@ -324,10 +324,7 @@ mod tests {
             ("b".to_string(), 4.0),
             ("c".to_string(), 3.0),
         ];
-        let semantic = vec![
-            ("a".to_string(), 0.9),
-            ("b".to_string(), 0.5),
-        ];
+        let semantic = vec![("a".to_string(), 0.9), ("b".to_string(), 0.5)];
         let results = fuse_results(&bm25, &semantic, &config);
         assert!((results[0].score - 1.0).abs() < 0.0001);
         // Subsequent results should be strictly less than 1.0 and visually

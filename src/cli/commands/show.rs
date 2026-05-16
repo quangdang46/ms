@@ -35,39 +35,57 @@ pub struct ShowArgs {
 }
 
 pub fn run(ctx: &AppContext, args: &ShowArgs) -> Result<()> {
-    // Try to find skill by ID or name
+    // Try to find skill by ID or name. Accept any of:
+    //   - storage id (`rust-error-handling`)
+    //   - canonical id (`local/rust-error-handling`)
+    //   - alias
+    //   - display id / metadata cross-reference
     let direct = ctx.db.get_skill(&args.skill)?;
 
-    let skill = if args.skill.contains('/') {
-        direct.ok_or_else(|| MsError::SkillNotFound(format!("skill not found: {}", args.skill)))?
-    } else if let Some(resolution) = ctx.db.resolve_alias(&args.skill)? {
-        ctx.db
-            .get_skill(&resolution.canonical_id)?
-            .ok_or_else(|| MsError::SkillNotFound(format!("skill not found: {}", args.skill)))?
-    } else {
-        let mut matches = ctx.db.find_skills_by_metadata_ref(&args.skill)?;
-        if let Some(skill) = &direct {
-            if !matches.iter().any(|candidate| candidate.id == skill.id) {
-                matches.push(skill.clone());
+    // First, check alias resolution (works for any input form).
+    if direct.is_none() {
+        if let Some(resolution) = ctx.db.resolve_alias(&args.skill)? {
+            if let Some(skill) = ctx.db.get_skill(&resolution.canonical_id)? {
+                return display_skill(ctx, &skill, args);
             }
         }
+    }
 
-        match matches.as_slice() {
-            [skill] => skill.clone(),
-            [] => direct.ok_or_else(|| {
-                MsError::SkillNotFound(format!("skill not found: {}", args.skill))
-            })?,
-            matches => {
-                let ids = matches
-                    .iter()
-                    .map(skill_machine_id)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                return Err(MsError::ValidationFailed(format!(
-                    "skill reference '{}' is ambiguous; use one of: {}",
-                    args.skill, ids
-                )));
+    // Try metadata-driven lookup (matches canonical_id, display_id, or
+    // metadata.id). This is the path that lets `local/rust-error-handling`
+    // resolve to the storage id `rust-error-handling`.
+    let mut matches = ctx.db.find_skills_by_metadata_ref(&args.skill)?;
+    if let Some(skill) = &direct {
+        if !matches.iter().any(|candidate| candidate.id == skill.id) {
+            matches.push(skill.clone());
+        }
+    }
+
+    // If the input contains '/' and didn't match in DB, try stripping the
+    // provider prefix as a last resort: `local/foo` -> `foo`.
+    if matches.is_empty() && direct.is_none() {
+        if let Some((_, short)) = args.skill.split_once('/') {
+            if let Some(skill) = ctx.db.get_skill(short)? {
+                matches.push(skill);
             }
+        }
+    }
+
+    let skill = match matches.as_slice() {
+        [skill] => skill.clone(),
+        [] => {
+            return Err(MsError::SkillNotFound(args.skill.clone()));
+        }
+        matches => {
+            let ids = matches
+                .iter()
+                .map(skill_machine_id)
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(MsError::ValidationFailed(format!(
+                "skill reference '{}' is ambiguous; use one of: {}",
+                args.skill, ids
+            )));
         }
     };
 
@@ -549,8 +567,21 @@ fn should_use_rich_for_show() -> bool {
 }
 
 fn skill_machine_id(skill: &SkillRecord) -> String {
+    // Mirror list.rs/route.rs: short id for local, canonical for non-local.
     let metadata: serde_json::Value =
         serde_json::from_str(&skill.metadata_json).unwrap_or_default();
+
+    let provider = skill
+        .provider
+        .as_deref()
+        .or_else(|| metadata.get("provider").and_then(|value| value.as_str()))
+        .filter(|value| !value.is_empty())
+        .unwrap_or("local");
+
+    if provider == "local" && !skill.id.is_empty() {
+        return skill.id.clone();
+    }
+
     metadata
         .get("canonical_id")
         .and_then(|value| value.as_str())
@@ -559,14 +590,10 @@ fn skill_machine_id(skill: &SkillRecord) -> String {
         .or_else(|| {
             if skill.id.contains('/') {
                 Some(skill.id.clone())
+            } else if provider != "local" {
+                Some(format!("{provider}/{}", skill.id))
             } else {
-                skill.provider.as_deref().map(|provider| {
-                    if provider == "local" {
-                        skill.id.clone()
-                    } else {
-                        format!("{provider}/{}", skill.id)
-                    }
-                })
+                None
             }
         })
         .unwrap_or_else(|| skill.id.clone())

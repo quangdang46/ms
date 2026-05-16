@@ -32,8 +32,9 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            if cli.robot {
-                // Robot mode: JSON error output to stdout
+            let json_output = cli.robot || cli.output_format() == ms::cli::OutputFormat::Json;
+            if json_output {
+                // Machine-readable JSON error output to stdout
                 let (code, message) = match &e {
                     ms::MsError::ApprovalRequired(msg) => ("approval_required", msg.clone()),
                     ms::MsError::DestructiveBlocked(msg) => ("destructive_blocked", msg.clone()),

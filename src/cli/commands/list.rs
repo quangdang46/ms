@@ -318,19 +318,43 @@ fn normalize_layer(input: &str) -> String {
 }
 
 fn skill_machine_id(skill: &SkillRecord) -> String {
+    // Surface form rule (consistent with `route`/`suggest`/`load`):
+    //   - For the implicit `local` provider, emit the short id alone
+    //     (`rust-error-handling`).
+    //   - For an explicit non-local provider, emit the canonical
+    //     `<provider>/<id>` form.
+    // This avoids the `local/` prefix-only-in-list inconsistency that
+    // confused agents passing `route`'s `skill_id` back to other commands.
     let metadata: serde_json::Value =
         serde_json::from_str(&skill.metadata_json).unwrap_or_default();
+
+    let provider = skill
+        .provider
+        .as_deref()
+        .or_else(|| metadata.get("provider").and_then(|value| value.as_str()))
+        .filter(|value| !value.is_empty())
+        .unwrap_or("local");
+
+    if provider == "local" {
+        // Always prefer the short id for local skills.
+        if !skill.id.is_empty() {
+            return skill.id.clone();
+        }
+    }
+
+    // For non-local providers, use canonical_id when available, otherwise
+    // construct it from provider + id.
     metadata
         .get("canonical_id")
         .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty())
         .map(str::to_string)
         .unwrap_or_else(|| {
-            if let Some(provider) = skill.provider.as_deref() {
-                if provider != "local" {
-                    return format!("{provider}/{}", skill.id);
-                }
+            if provider == "local" {
+                skill.id.clone()
+            } else {
+                format!("{provider}/{}", skill.id)
             }
-            skill.id.clone()
         })
 }
 

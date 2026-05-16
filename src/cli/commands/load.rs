@@ -977,10 +977,10 @@ fn build_load_cache_key(
 fn resolve_skill(ctx: &AppContext, skill_ref: &str) -> Result<SkillRecord> {
     let direct = ctx.db.get_skill(skill_ref)?;
 
-    if skill_ref.contains('/') {
-        if let Some(skill) = direct {
-            return Ok(skill);
-        }
+    if let Some(skill) = direct.clone() {
+        // Direct DB hit (handles both short-form and provider-qualified ids
+        // when the DB row was stored under that key).
+        return Ok(skill);
     }
 
     // Try alias resolution before fuzzy metadata matching.
@@ -990,12 +990,9 @@ fn resolve_skill(ctx: &AppContext, skill_ref: &str) -> Result<SkillRecord> {
         }
     }
 
-    let mut matches = ctx.db.find_skills_by_metadata_ref(skill_ref)?;
-    if let Some(skill) = &direct {
-        if !matches.iter().any(|candidate| candidate.id == skill.id) {
-            matches.push(skill.clone());
-        }
-    }
+    // Metadata-driven lookup matches canonical_id, display_id, and metadata.id
+    // — this is what lets `local/foo` resolve to the storage id `foo`.
+    let matches = ctx.db.find_skills_by_metadata_ref(skill_ref)?;
 
     match matches.as_slice() {
         [skill] => return Ok(skill.clone()),
@@ -1007,15 +1004,17 @@ fn resolve_skill(ctx: &AppContext, skill_ref: &str) -> Result<SkillRecord> {
                 .collect::<Vec<_>>()
                 .join(", ");
             return Err(MsError::ValidationFailed(format!(
-                "skill reference '{}' is ambiguous; use one of: {}",
-                skill_ref, ids
+                "skill reference '{skill_ref}' is ambiguous; use one of: {ids}"
             )));
         }
     }
 
-    // Try direct ID lookup
-    if let Some(skill) = direct {
-        return Ok(skill);
+    // If the input contains '/' (e.g. `local/foo`) and didn't match by DB id
+    // or metadata, try stripping the provider prefix as a last resort.
+    if let Some((_, short)) = skill_ref.split_once('/') {
+        if let Some(skill) = ctx.db.get_skill(short)? {
+            return Ok(skill);
+        }
     }
 
     // Archive fallback: check git archive for unindexed skills
@@ -1025,14 +1024,12 @@ fn resolve_skill(ctx: &AppContext, skill_ref: &str) -> Result<SkillRecord> {
             // Return a placeholder that will be resolved when content is loaded
             // For now, return a not-found error with archive hint
             return Err(MsError::SkillNotFound(format!(
-                "skill not indexed: {skill_ref} (found in archive - run 'ms index' to add)"
+                "{skill_ref} (found in archive - run 'ms index' to add)"
             )));
         }
     }
 
-    Err(MsError::SkillNotFound(format!(
-        "skill not found: {skill_ref}"
-    )))
+    Err(MsError::SkillNotFound(skill_ref.to_string()))
 }
 
 // ==================== Meta-Skill Integration ====================

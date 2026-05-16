@@ -15,8 +15,13 @@ use crate::security::SafetyGate;
 
 #[derive(Args, Debug)]
 pub struct ValidateArgs {
-    /// Skill ID or path to SKILL.md
-    pub skill: String,
+    /// Skill ID or path to SKILL.md (omit when using --all)
+    #[arg(required_unless_present = "all")]
+    pub skill: Option<String>,
+
+    /// Validate all indexed skills
+    #[arg(long, conflicts_with = "skill")]
+    pub all: bool,
 
     /// Run UBS on code blocks
     #[arg(long)]
@@ -24,34 +29,96 @@ pub struct ValidateArgs {
 }
 
 pub fn run(ctx: &AppContext, args: &ValidateArgs) -> Result<()> {
-    let skill_md = resolve_skill_markdown(ctx, &args.skill)?;
-    let raw = std::fs::read_to_string(&skill_md).map_err(|err| {
-        crate::error::MsError::Config(format!("read {}: {err}", skill_md.display()))
-    })?;
-    let spec = parse_markdown(&raw)?;
-
-    let warnings = validate(&spec)?;
-    let ubs_result = if args.ubs {
-        let gate = SafetyGate::from_context(ctx);
-        let client = UbsClient::new(None).with_safety(gate);
-        Some(validate_with_ubs(&spec, &client)?)
+    let targets: Vec<(String, std::path::PathBuf)> = if args.all {
+        crate::cli::commands::discover_skill_markdowns(ctx)?
+            .into_iter()
+            .map(|p| (p.display().to_string(), p))
+            .collect()
     } else {
-        None
+        let skill_ref = args.skill.as_deref().ok_or_else(|| {
+            crate::error::MsError::Config("missing skill (or use --all)".to_string())
+        })?;
+        let path = resolve_skill_markdown(ctx, skill_ref)?;
+        vec![(skill_ref.to_string(), path)]
     };
 
-    if ctx.output_format != OutputFormat::Human {
-        let report = build_report(&args.skill, &skill_md, &warnings, ubs_result.as_ref());
-        return emit_json(&report);
+    if targets.is_empty() {
+        return Err(crate::error::MsError::Config(
+            "no skills found to validate".to_string(),
+        ));
     }
 
+    let mut all_reports: Vec<ValidateReport> = Vec::new();
+    let mut any_ubs_failure = false;
+
+    for (skill_label, skill_md) in &targets {
+        let raw = std::fs::read_to_string(skill_md).map_err(|err| {
+            crate::error::MsError::Config(format!("read {}: {err}", skill_md.display()))
+        })?;
+        let spec = parse_markdown(&raw)?;
+
+        let warnings = validate(&spec)?;
+        let ubs_result = if args.ubs {
+            let gate = SafetyGate::from_context(ctx);
+            let client = UbsClient::new(None).with_safety(gate);
+            Some(validate_with_ubs(&spec, &client)?)
+        } else {
+            None
+        };
+
+        if let Some(result) = &ubs_result {
+            if !result.is_clean() {
+                any_ubs_failure = true;
+            }
+        }
+
+        all_reports.push(build_report(
+            skill_label,
+            skill_md,
+            &warnings,
+            ubs_result.as_ref(),
+        ));
+
+        if ctx.output_format == OutputFormat::Human {
+            render_human(skill_label, skill_md, &warnings, ubs_result.as_ref());
+        }
+    }
+
+    if ctx.output_format != OutputFormat::Human {
+        if all_reports.len() == 1 {
+            emit_json(&all_reports[0])?;
+        } else {
+            emit_json(&serde_json::json!({
+                "status": "ok",
+                "count": all_reports.len(),
+                "reports": all_reports,
+            }))?;
+        }
+    }
+
+    if any_ubs_failure {
+        return Err(MsError::ValidationFailed(
+            "UBS findings detected".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn render_human(
+    skill_label: &str,
+    skill_md: &std::path::Path,
+    warnings: &[ValidationWarning],
+    ubs_result: Option<&UbsResult>,
+) {
     let mut layout = HumanLayout::new();
     layout.title("Validation");
-    layout.kv("Skill", &args.skill);
+    layout.kv("Skill", skill_label);
     layout.kv("Path", &skill_md.display().to_string());
 
     if !warnings.is_empty() {
         layout.section("Warnings");
-        for warning in &warnings {
+        for warning in warnings {
             layout.bullet(&format!("{}: {}", warning.field, warning.message));
         }
     }
@@ -78,23 +145,13 @@ pub fn run(ctx: &AppContext, args: &ValidateArgs) -> Result<()> {
     if warnings.is_empty()
         && ubs_result
             .as_ref()
-            .is_none_or(crate::quality::ubs::UbsResult::is_clean)
+            .is_none_or(|r| crate::quality::ubs::UbsResult::is_clean(r))
     {
         layout.section("Status");
         layout.bullet("OK");
     }
 
     emit_human(layout);
-
-    if let Some(result) = ubs_result {
-        if !result.is_clean() {
-            return Err(MsError::ValidationFailed(
-                "UBS findings detected".to_string(),
-            ));
-        }
-    }
-
-    Ok(())
 }
 
 #[derive(Serialize)]

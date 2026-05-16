@@ -33,15 +33,43 @@ pub fn to_mermaid(graph: &DiGraph, _issues: &[Issue]) -> String {
     let mut lines = vec!["graph TD;".to_string()];
     let n = graph.node_count();
 
+    // Emit all nodes first so the diagram still renders even when there
+    // are no edges. Mermaid allows bare node ids on their own line and
+    // will render them as standalone boxes.
+    for i in 0..n {
+        if let Some(id) = graph.node_id(i) {
+            lines.push(format!("  {};", sanitize_mermaid_id(&id)));
+        }
+    }
+
     for i in 0..n {
         for &j in graph.successors_slice(i) {
             if let (Some(from), Some(to)) = (graph.node_id(i), graph.node_id(j)) {
-                lines.push(format!("  {} --> {};", from, to));
+                lines.push(format!(
+                    "  {} --> {};",
+                    sanitize_mermaid_id(&from),
+                    sanitize_mermaid_id(&to)
+                ));
             }
         }
     }
 
     lines.join("\n")
+}
+
+/// Mermaid node ids must be alphanumeric/underscore. Replace anything else
+/// with `_` so provider-qualified ids (e.g. `local/rust-error-handling`)
+/// produce valid mermaid output.
+fn sanitize_mermaid_id(id: &str) -> String {
+    id.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }
 
 /// Export graph as JSON.

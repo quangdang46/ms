@@ -21,7 +21,19 @@
 curl -fsSL "https://raw.githubusercontent.com/quangdang46/ms/main/install.sh?$(date +%s)" | bash
 ```
 
-**Via cargo:**
+The installer downloads the prebuilt `unknown-linux-gnu` artifact by default and
+automatically falls back to the statically-linked `unknown-linux-musl` artifact
+if the gnu build is unavailable for your release. If both downloads fail (or
+the binary refuses to run because of a glibc mismatch — for example on Ubuntu
+22.04 LTS / glibc 2.35 against a release built on a newer runner), build from
+source instead:
+
+```bash
+rustup update stable                          # need >= 1.85
+cargo install --git https://github.com/quangdang46/ms
+```
+
+**Via cargo (in a clone):**
 
 ```bash
 cargo install --path .
@@ -295,7 +307,23 @@ Skills can enter the system through multiple paths:
 
 ### 1. Hand-Written SKILL.md Files
 
-Write skills directly as markdown:
+Write skills directly as markdown. **The file must be named exactly `SKILL.md`
+inside its own directory** — `ms index` ignores arbitrarily-named `.md` files.
+Recommended layout:
+
+```
+skills/
+├── rust-error-handling/
+│   └── SKILL.md
+├── async-tokio/
+│   └── SKILL.md
+│   └── references/        # optional: reference docs picked up at full disclosure
+│   └── scripts/           # optional: companion scripts
+└── python-logging/
+    └── SKILL.md
+```
+
+A minimal `SKILL.md` looks like:
 
 ````markdown
 # Rust Error Handling
@@ -321,6 +349,9 @@ fn read_config(path: &str) -> Result<Config, ConfigError> {
 - Always include context when wrapping errors
 - Use `expect()` only when panic is the correct response
 ````
+
+After adding or editing a `SKILL.md`, run `ms index` (or `ms index --watch` for
+continuous indexing) to pick up the change.
 
 ### 2. CASS Session Mining
 
@@ -631,7 +662,10 @@ ms sync origin --dry-run             # Preview changes
 ms sync --status                     # Current sync state
 ms conflicts list                    # Unresolved conflicts
 ms conflicts resolve <skill> --strategy prefer-local --apply
-ms machine info                      # Machine identity
+ms machine info                      # Machine identity (human view)
+ms machine info -O json              # Machine identity as structured JSON
+                                     # (machine_id is a UUID — useful for
+                                     # multi-machine sync scripting)
 ```
 
 #### RU (Repo Updater) Backend
@@ -670,6 +704,9 @@ ms mcp serve --tcp-port 8080         # Start MCP server (TCP transport on 127.0.
 ```bash
 ms doctor                            # Health checks
 ms doctor --fix                      # Auto-repair issues
+ms commands                          # Tree of every subcommand (discovery)
+ms commands --options                # Tree with all flags/options included
+ms commands --filter graph -O json   # Filtered, machine-readable
 ms backup create                     # Snapshot ms state
 ms backup list                       # List backups
 ms backup restore --latest --approve # Restore latest snapshot

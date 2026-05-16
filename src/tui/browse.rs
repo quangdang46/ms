@@ -803,7 +803,7 @@ impl Drop for TerminalGuard {
 pub fn run_browse_tui(db: &Database) -> Result<Option<String>> {
     // Check if stdout is a terminal
     if !io::stdout().is_terminal() {
-        return Err(MsError::ValidationFailed(
+        return Err(MsError::TerminalRequired(
             "browse command requires an interactive terminal".to_string(),
         ));
     }

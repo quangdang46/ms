@@ -100,11 +100,35 @@ fn parse_alias_add() {
             Some(commands::alias::AliasCommand::Add {
                 alias,
                 target,
+                target_positional,
                 kind,
             }) => {
                 assert_eq!(alias, "old");
-                assert_eq!(target, "new");
+                assert_eq!(target.as_deref(), Some("new"));
+                assert_eq!(target_positional, None);
                 assert_eq!(kind, "legacy");
+            }
+            other => panic!("unexpected alias command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
+
+#[test]
+fn parse_alias_add_positional_target() {
+    // README example: `ms alias add <alias> <target>` with positional target.
+    match parse(&["alias", "add", "old", "new"]) {
+        Commands::Alias(args) => match args.command {
+            Some(commands::alias::AliasCommand::Add {
+                alias,
+                target,
+                target_positional,
+                kind,
+            }) => {
+                assert_eq!(alias, "old");
+                assert_eq!(target, None);
+                assert_eq!(target_positional.as_deref(), Some("new"));
+                assert_eq!(kind, "alternate");
             }
             other => panic!("unexpected alias command: {other:?}"),
         },
@@ -294,8 +318,20 @@ fn parse_update_args() {
 fn parse_validate_args() {
     match parse(&["validate", "skill-a", "--ubs"]) {
         Commands::Validate(args) => {
-            assert_eq!(args.skill, "skill-a");
+            assert_eq!(args.skill.as_deref(), Some("skill-a"));
+            assert!(!args.all);
             assert!(args.ubs);
+        }
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
+
+#[test]
+fn parse_validate_all_args() {
+    match parse(&["validate", "--all"]) {
+        Commands::Validate(args) => {
+            assert!(args.skill.is_none());
+            assert!(args.all);
         }
         other => panic!("unexpected command: {other:?}"),
     }

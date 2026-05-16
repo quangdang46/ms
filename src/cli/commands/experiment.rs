@@ -325,7 +325,10 @@ fn run_list(ctx: &AppContext, args: &ExperimentListArgs) -> Result<()> {
             .kv("Scope ID", output.scope_id.as_deref().unwrap_or("-"))
             .kv("Status", &output.status)
             .kv("Started", &output.started_at)
-            .kv("Variants", &format!("{:?}", output.variants))
+            .kv(
+                "Variants",
+                &serde_json::to_string(&output.variants).unwrap_or_default(),
+            )
             .blank();
     }
     crate::cli::output::emit_human(layout);
@@ -1163,7 +1166,7 @@ fn resolve_skill_id(ctx: &AppContext, input: &str) -> Result<String> {
             return Ok(skill.id);
         }
     }
-    Err(MsError::SkillNotFound(format!("skill not found: {input}")))
+    Err(MsError::SkillNotFound(input.to_string()))
 }
 
 #[cfg(test)]

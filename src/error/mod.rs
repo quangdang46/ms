@@ -99,6 +99,12 @@ pub enum MsError {
     #[error("Timeout: {0}")]
     Timeout(String),
 
+    /// The command requires an interactive terminal (TTY) but stdin/stdout
+    /// is being piped. Distinct from `ValidationFailed` so callers can
+    /// detect the specific TTY requirement.
+    #[error("Interactive terminal required: {0}")]
+    TerminalRequired(String),
+
     #[error("Assertion failed: {0}")]
     AssertionFailed(String),
 
@@ -152,6 +158,7 @@ impl MsError {
             Self::ParentSkillNotFound { .. } => ErrorCode::SkillParentNotFound,
             Self::Import(_) => ErrorCode::ImportFailed,
             Self::AuthError(_) => ErrorCode::AuthenticationFailed,
+            Self::TerminalRequired(_) => ErrorCode::TerminalRequired,
         }
     }
 

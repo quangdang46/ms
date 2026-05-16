@@ -745,9 +745,8 @@ fn run_serve(ctx: &AppContext, args: &ServeArgs) -> Result<()> {
 /// concurrent SQLite/search-index access through `AppContext`.
 fn run_tcp_server(ctx: &AppContext, port: u16, debug: bool) -> Result<()> {
     let addr = format!("127.0.0.1:{port}");
-    let listener = TcpListener::bind(&addr).map_err(|e| {
-        MsError::Config(format!("failed to bind MCP TCP listener on {addr}: {e}"))
-    })?;
+    let listener = TcpListener::bind(&addr)
+        .map_err(|e| MsError::Config(format!("failed to bind MCP TCP listener on {addr}: {e}")))?;
 
     if debug {
         eprintln!("[ms-mcp] Listening on {addr}");

@@ -22,6 +22,7 @@ pub mod browse;
 pub mod build;
 pub mod bundle;
 pub mod cm;
+pub mod commands;
 pub mod compress;
 pub mod config;
 pub mod conflicts;
@@ -143,6 +144,7 @@ pub fn run(ctx: &AppContext, command: &Commands) -> Result<()> {
         Commands::Template(args) => template::run(ctx, args),
         Commands::Embed(args) => embed::run(ctx, args),
         Commands::Providers(args) => providers::run(ctx, args),
+        Commands::Commands(args) => commands::run(ctx, args),
     }
 }
 

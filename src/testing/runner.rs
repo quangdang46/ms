@@ -262,7 +262,7 @@ impl<'a> SkillTestRunner<'a> {
             .ctx
             .git
             .skill_path(skill_id)
-            .ok_or_else(|| MsError::SkillNotFound(format!("Skill not found: {skill_id}")))?;
+            .ok_or_else(|| MsError::SkillNotFound(skill_id.to_string()))?;
 
         let tests_dir = skill_path.join("tests");
         if !tests_dir.exists() {

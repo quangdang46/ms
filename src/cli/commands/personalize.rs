@@ -80,9 +80,7 @@ fn run_skill(ctx: &AppContext, args: &SkillArgs) -> Result<()> {
 
     // Load the skill
     let skill = db.get_skill(&args.skill_id)?;
-    let skill = skill.ok_or_else(|| {
-        crate::error::MsError::SkillNotFound(format!("skill not found: {}", args.skill_id))
-    })?;
+    let skill = skill.ok_or_else(|| crate::error::MsError::SkillNotFound(args.skill_id.clone()))?;
 
     // Load style profile
     let style = load_style_profile(ctx, args.style.as_deref())?;

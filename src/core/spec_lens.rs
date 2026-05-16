@@ -449,11 +449,7 @@ echo hello
 content
 "#;
         let parsed = parse_markdown(md).expect("parse");
-        let titles: Vec<&str> = parsed
-            .sections
-            .iter()
-            .map(|s| s.title.as_str())
-            .collect();
+        let titles: Vec<&str> = parsed.sections.iter().map(|s| s.title.as_str()).collect();
         assert_eq!(titles, vec!["Real Section", "Another Real Section"]);
     }
 }

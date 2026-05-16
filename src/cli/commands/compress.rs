@@ -391,7 +391,11 @@ fn emit_compress_output(ctx: &AppContext, compressed: &CompressedSkill) -> Resul
             layout.kv("Original Words", &compressed.original_words.to_string());
             layout.kv("Summary Words", &compressed.summary_words.to_string());
             layout.kv(
-                "Compression",
+                "Compression Ratio",
+                &format!("{:.3}", compressed.compression_ratio),
+            );
+            layout.kv(
+                "Savings",
                 &format!("{:.1}%", (1.0 - compressed.compression_ratio) * 100.0),
             );
             layout.blank();

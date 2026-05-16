@@ -247,12 +247,10 @@ fn run_review(ctx: &AppContext, args: &ReviewArgs) -> Result<()> {
     let skill_a = db.get_skill(&args.skill_a)?;
     let skill_b = db.get_skill(&args.skill_b)?;
 
-    let skill_a = skill_a.ok_or_else(|| {
-        crate::error::MsError::SkillNotFound(format!("skill not found: {}", args.skill_a))
-    })?;
-    let skill_b = skill_b.ok_or_else(|| {
-        crate::error::MsError::SkillNotFound(format!("skill not found: {}", args.skill_b))
-    })?;
+    let skill_a =
+        skill_a.ok_or_else(|| crate::error::MsError::SkillNotFound(args.skill_a.clone()))?;
+    let skill_b =
+        skill_b.ok_or_else(|| crate::error::MsError::SkillNotFound(args.skill_b.clone()))?;
 
     if ctx.output_format != OutputFormat::Human {
         let output = serde_json::json!({

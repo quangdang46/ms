@@ -25,6 +25,14 @@ pub enum ContractCommand {
     Create(CreateArgs),
     /// List built-in and custom contracts
     List(ListArgs),
+    /// Show details for a single contract (built-in or custom)
+    Show(ShowArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct ShowArgs {
+    /// Contract id to inspect
+    pub id: String,
 }
 
 #[derive(Args, Debug)]
@@ -72,6 +80,47 @@ pub fn run(ctx: &AppContext, args: &ContractArgs) -> Result<()> {
     match &args.command {
         ContractCommand::Create(cmd) => create_contract(ctx, cmd),
         ContractCommand::List(cmd) => list_contracts(ctx, cmd),
+        ContractCommand::Show(cmd) => show_contract(ctx, cmd),
+    }
+}
+
+fn show_contract(ctx: &AppContext, args: &ShowArgs) -> Result<()> {
+    let path = custom_contracts_path(&ctx.ms_root);
+    let id = args.id.trim();
+    if id.is_empty() {
+        return Err(MsError::ValidationFailed("contract id required".into()));
+    }
+
+    let mut found: Option<(PackContract, &'static str)> = None;
+    for contract in builtin_contracts() {
+        if contract.id == id {
+            found = Some((contract, "builtin"));
+            break;
+        }
+    }
+    if found.is_none() {
+        for contract in load_custom_contracts(&path)? {
+            if contract.id == id {
+                found = Some((contract, "custom"));
+                break;
+            }
+        }
+    }
+
+    let (contract, source) =
+        found.ok_or_else(|| MsError::NotFound(format!("contract not found: {id}")))?;
+
+    if ctx.output_format != OutputFormat::Human {
+        emit_robot(&robot_ok(serde_json::json!({
+            "contract": contract,
+            "source": source,
+        })))
+    } else {
+        let mut layout = HumanLayout::new();
+        layout.title(&format!("Contract: {}", contract.id));
+        render_contract(&mut layout, &contract, source);
+        emit_human(layout);
+        Ok(())
     }
 }
 

@@ -145,6 +145,8 @@ pub enum ErrorCode {
     ImportFailed,
     /// E886: Authentication failed
     AuthenticationFailed,
+    /// E887: Command requires an interactive terminal (TTY)
+    TerminalRequired,
 
     // ========================================
     // Internal errors (9xx)
@@ -230,6 +232,7 @@ impl ErrorCode {
             Self::MiningFailed => 883,
             Self::ImportFailed => 884,
             Self::AuthenticationFailed => 885,
+            Self::TerminalRequired => 886,
 
             // Internal errors (9xx)
             Self::InternalError => 901,
@@ -389,6 +392,9 @@ impl ErrorCode {
             Self::AuthenticationFailed => {
                 "Authentication failed. Check your credentials or try logging in again"
             }
+            Self::TerminalRequired => {
+                "This command requires an interactive terminal (TTY). Run it directly from a shell — not in --robot mode, --output-format json, piped stdin/stdout, or non-interactive CI"
+            }
 
             // Internal errors
             Self::InternalError => {
@@ -450,6 +456,7 @@ impl ErrorCode {
             | Self::MiningFailed
             | Self::ImportFailed
             | Self::AuthenticationFailed
+            | Self::TerminalRequired
             | Self::Timeout
             | Self::NotFound
             | Self::IoError => true,
@@ -536,6 +543,8 @@ impl ErrorCode {
             Self::CmUnavailable,
             Self::MiningFailed,
             Self::ImportFailed,
+            Self::AuthenticationFailed,
+            Self::TerminalRequired,
             Self::InternalError,
             Self::NotImplemented,
             Self::Timeout,

@@ -81,24 +81,22 @@ detect_platform() {
 
     case "$os" in
         linux)
-            # Prefer the statically-linked musl binary when:
-            #   * we can't determine the host glibc version, OR
-            #   * the host glibc is older than the runner that built the
-            #     `unknown-linux-gnu` artifact (currently glibc 2.39 on
-            #     ubuntu-latest). On Ubuntu 22.04 LTS (glibc 2.35), the gnu
-            #     build fails with `GLIBC_2.38 not found`, so musl is the
-            #     only one that runs.
-            local glibc_version=""
-            if command -v ldd >/dev/null 2>&1; then
-                glibc_version="$(ldd --version 2>/dev/null | awk 'NR==1 {print $NF}')"
-            fi
-            if [[ -z "$glibc_version" ]] || \
-               ! printf '%s\n%s\n' "2.38" "$glibc_version" \
-                 | sort -V -C 2>/dev/null; then
-                os="unknown-linux-musl"
-            else
-                os="unknown-linux-gnu"
-            fi
+            # Linux libc selection.
+            #
+            # The release pipeline historically published only the
+            # `unknown-linux-gnu` artifact, which links against whatever
+            # glibc the build runner provides. When that runner uses a newer
+            # ubuntu image (e.g. glibc 2.39), users on Ubuntu 22.04 LTS
+            # (glibc 2.35) get `GLIBC_2.38 not found` at run time.
+            #
+            # We previously hard-coded `unknown-linux-musl` for older glibc,
+            # but the pipeline doesn't always publish a matching musl
+            # artifact, so the installer 404'd. The robust approach is:
+            #   1. Default to `unknown-linux-gnu`.
+            #   2. Remember the host glibc so we can fall back to
+            #      `unknown-linux-musl` if `gnu` 404s or the binary fails to
+            #      run because of a glibc mismatch.
+            os="unknown-linux-gnu"
             ;;
         darwin)
             os="apple-darwin"
@@ -377,10 +375,28 @@ main() {
     local archive_url="${base_url}/${archive_name}"
     local checksums_url="${base_url}/SHA256SUMS.txt"
 
-    # Download archive
-    download "$archive_url" "${temp_dir}/${archive_name}" || {
+    # Linux libc fallback: if the gnu artifact 404s, try the musl artifact
+    # before giving up. Older glibc hosts (Ubuntu 22.04 LTS, etc.) need this
+    # to avoid the silent install failure documented in the project's bug
+    # report.
+    local primary_failed=0
+    if ! download "$archive_url" "${temp_dir}/${archive_name}"; then
+        primary_failed=1
+    fi
+
+    if [[ $primary_failed -eq 1 ]] && [[ "$platform" == *unknown-linux-gnu ]]; then
+        warn "gnu artifact unavailable; trying statically-linked musl build..."
+        platform="${platform%-unknown-linux-gnu}-unknown-linux-musl"
+        archive_name="ms-${version_for_url}-${platform}.tar.gz"
+        archive_url="${base_url}/${archive_name}"
+        if download "$archive_url" "${temp_dir}/${archive_name}"; then
+            primary_failed=0
+        fi
+    fi
+
+    if [[ $primary_failed -eq 1 ]]; then
         die "Download failed: $archive_url"
-    }
+    fi
 
     if [[ "$VERIFY" == "true" ]]; then
         download "$checksums_url" "${temp_dir}/SHA256SUMS.txt" || {
@@ -452,14 +468,21 @@ main() {
     # Run version check
     echo ""
     log "Verifying installation..."
-    if "${INSTALL_DIR}/${BINARY_NAME}" --version; then
+    if "${INSTALL_DIR}/${BINARY_NAME}" --version 2>/dev/null; then
         echo ""
         log "${GREEN}Installation complete! Run 'ms --help' to get started.${NC}"
     else
-        warn "Binary installed but failed to run. Please check the logs."
+        warn "Binary installed but failed to run."
         warn "This is often caused by a GLIBC version mismatch on older Linux"
-        warn "distributions. Try building from source with 'cargo install --path .'"
-        warn "after cloning https://github.com/quangdang46/ms"
+        warn "distributions (e.g. Ubuntu 22.04 LTS ships glibc 2.35)."
+        warn ""
+        warn "Workarounds, in order of preference:"
+        warn "  1. Re-run this installer; it will try the statically-linked"
+        warn "     musl artifact if the gnu artifact is incompatible."
+        warn "  2. Build from source with a recent toolchain:"
+        warn "       rustup update stable   # need >= 1.85"
+        warn "       cargo install --git https://github.com/${REPO}"
+        warn "  3. Install via the project's Homebrew tap or Scoop bucket."
         exit 1
     fi
 }

@@ -207,6 +207,10 @@ fn run_sync(ctx: &AppContext, args: &SyncArgs) -> Result<()> {
             println!();
             println!("{} {}", "Provider:".bold(), report.root_path.cyan());
             println!("{}", "=".repeat(60));
+            if report.missing {
+                println!("  {} (missing on disk)", "!".yellow());
+                continue;
+            }
             println!(
                 "  {} new, {} changed, {} unchanged, {} errors",
                 report.new_count.to_string().green(),
@@ -271,11 +275,20 @@ fn sync_provider_root(
         changed_count: 0,
         unchanged_count: 0,
         error_count: 0,
+        missing: false,
         collisions: Vec::new(),
         new_skills: Vec::new(),
         changed_skills: Vec::new(),
         lint_warnings: Vec::new(),
     };
+
+    // Bail early when the provider root doesn't actually exist. Otherwise we
+    // silently produce a `0 new, 0 changed, 0 unchanged, 0 errors` line that
+    // looks identical to a healthy empty root.
+    if !root.is_dir() {
+        report.missing = true;
+        return Ok(report);
+    }
 
     // Ensure cache dir exists
     let root_hash_dir = cache_dir.join(sanitize_path_component(root));
@@ -458,6 +471,11 @@ struct ProviderSyncReport {
     changed_count: usize,
     unchanged_count: usize,
     error_count: usize,
+    /// Whether the provider root directory exists on disk. When false the
+    /// other counts are all zero and the human view marks the entry as
+    /// `(missing)` so users can tell silent zeros from real activity.
+    #[serde(default)]
+    missing: bool,
     collisions: Vec<String>,
     new_skills: Vec<String>,
     changed_skills: Vec<String>,

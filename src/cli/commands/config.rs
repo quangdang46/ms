@@ -12,11 +12,16 @@ use crate::error::Result;
 
 #[derive(Args, Debug)]
 pub struct ConfigArgs {
-    /// Configuration key to get/set
+    /// Configuration key to get/set, or one of `get`/`set`/`unset` to use
+    /// the explicit subcommand-style invocation.
     pub key: Option<String>,
 
-    /// Value to set
+    /// Value to set (or, when `key` is `get`/`set`/`unset`, the actual key)
     pub value: Option<String>,
+
+    /// Optional third positional: when invoked as `ms config set <key> <value>`,
+    /// this is the value to assign.
+    pub extra: Option<String>,
 
     /// List all configuration
     #[arg(long)]
@@ -45,6 +50,38 @@ pub fn run(ctx: &AppContext, args: &ConfigArgs) -> Result<()> {
     if let Some(key) = args.key.as_deref() {
         if matches!(key, "show" | "list" | "ls" | "dump") && args.value.is_none() {
             return emit_config(&ctx);
+        }
+
+        // README documents `ms config get <key>` and `ms config set <key> <value>`.
+        // The clap signature is `ms config [KEY] [VALUE] [EXTRA]`, so the
+        // pseudo-subcommands `get`/`set`/`unset` need explicit translation.
+        match key {
+            "get" => {
+                let target = args.value.as_deref().ok_or_else(|| {
+                    crate::error::MsError::Config("ms config get <key>: missing key".to_string())
+                })?;
+                return get_key(&ctx, target);
+            }
+            "set" => {
+                let target = args.value.as_deref().ok_or_else(|| {
+                    crate::error::MsError::Config(
+                        "ms config set <key> <value>: missing key".to_string(),
+                    )
+                })?;
+                let raw = args.extra.as_deref().ok_or_else(|| {
+                    crate::error::MsError::Config(
+                        "ms config set <key> <value>: missing value".to_string(),
+                    )
+                })?;
+                return set_key(&ctx, target, raw);
+            }
+            "unset" => {
+                let target = args.value.as_deref().ok_or_else(|| {
+                    crate::error::MsError::Config("ms config unset <key>: missing key".to_string())
+                })?;
+                return unset_key(&ctx, target);
+            }
+            _ => {}
         }
     }
 
@@ -100,18 +137,43 @@ fn get_key(ctx: &ConfigContext, key: &str) -> Result<()> {
 }
 
 fn set_key(ctx: &ConfigContext, key: &str, raw_value: &str) -> Result<()> {
+    // Validate the key is a known configuration path. set_path writes into
+    // the raw TOML document, so it would silently accept unknown keys.
+    let _ = config_value_at(&ctx.config, key)?;
+
     let mut doc = load_config_doc(&ctx.config_path)?;
     let value = parse_value(raw_value)?;
-    set_path(&mut doc, key, value)?;
+    set_path(&mut doc, key, value.clone())?;
     write_config_doc(&ctx.config_path, &doc)?;
-    Ok(())
+
+    if ctx.robot_mode {
+        output::emit_json(&serde_json::json!({
+            "status": "ok",
+            "action": "set",
+            "key": key,
+            "value": value,
+        }))
+    } else {
+        println!("set {key} = {}", format_value(&value));
+        Ok(())
+    }
 }
 
 fn unset_key(ctx: &ConfigContext, key: &str) -> Result<()> {
     let mut doc = load_config_doc(&ctx.config_path)?;
     unset_path(&mut doc, key)?;
     write_config_doc(&ctx.config_path, &doc)?;
-    Ok(())
+
+    if ctx.robot_mode {
+        output::emit_json(&serde_json::json!({
+            "status": "ok",
+            "action": "unset",
+            "key": key,
+        }))
+    } else {
+        println!("unset {key}");
+        Ok(())
+    }
 }
 
 fn load_config_doc(path: &std::path::Path) -> Result<toml::Value> {

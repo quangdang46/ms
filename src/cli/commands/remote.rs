@@ -38,7 +38,7 @@ pub struct RemoteAddArgs {
     pub url: String,
 
     /// Remote type (filesystem|git|ru|jfp-cloud)
-    #[arg(long, default_value = "filesystem")]
+    #[arg(long, alias = "type", default_value = "filesystem")]
     pub remote_type: String,
 
     /// Branch name (git remotes only)

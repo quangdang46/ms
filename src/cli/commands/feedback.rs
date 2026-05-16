@@ -186,7 +186,7 @@ fn resolve_skill_id(ctx: &AppContext, input: &str) -> Result<String> {
             return Ok(skill.id);
         }
     }
-    Err(MsError::SkillNotFound(format!("skill not found: {input}")))
+    Err(MsError::SkillNotFound(input.to_string()))
 }
 
 /// Update the contextual bandit with skill feedback.

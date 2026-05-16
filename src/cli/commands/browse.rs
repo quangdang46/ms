@@ -32,8 +32,8 @@ pub struct BrowseArgs {
 pub fn run(ctx: &AppContext, args: &BrowseArgs) -> Result<()> {
     // Cannot run TUI in robot mode
     if ctx.output_format != OutputFormat::Human {
-        return Err(MsError::ValidationFailed(
-            "browse command requires interactive terminal (cannot use --robot or --output-format)"
+        return Err(MsError::TerminalRequired(
+            "browse command requires an interactive terminal (cannot use --robot or --output-format)"
                 .to_string(),
         ));
     }

@@ -43,44 +43,16 @@ fn run_with_robot(robot_mode: bool, args: &InitArgs) -> Result<()> {
     // Check if already initialized
     if args.global {
         if config_path.exists() && !args.force {
-            if robot_mode {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "status": "error",
-                        "message": "Already initialized",
-                        "config": config_path.display().to_string()
-                    })
-                );
-            } else {
-                println!(
-                    "{} Already initialized at {}",
-                    "!".yellow(),
-                    config_path.display()
-                );
-                println!("  Use --force to reinitialize");
-            }
-            return Ok(());
+            return Err(MsError::Config(format!(
+                "already initialized at {}",
+                config_path.display()
+            )));
         }
     } else if target.exists() && !args.force {
-        if robot_mode {
-            println!(
-                "{}",
-                serde_json::json!({
-                    "status": "error",
-                    "message": "Already initialized",
-                    "path": target.display().to_string()
-                })
-            );
-        } else {
-            println!(
-                "{} Already initialized at {}",
-                "!".yellow(),
-                target.display()
-            );
-            println!("  Use --force to reinitialize");
-        }
-        return Ok(());
+        return Err(MsError::Config(format!(
+            "already initialized at {}",
+            target.display()
+        )));
     }
 
     if args.global {

@@ -20,10 +20,9 @@ pub mod progress;
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
 pub struct Cli {
-    /// \[DEPRECATED\] Enable JSON output for machine consumption.
-    /// Use --output-format=json or -m instead.
-    /// This flag is maintained for backward compatibility with existing integrations.
-    #[arg(long, global = true, hide = true)]
+    /// JSON output for automation (alias for --output-format=json / -m).
+    /// Kept for backward compatibility with existing integrations.
+    #[arg(long, global = true)]
     pub robot: bool,
 
     /// Output format (human, json, jsonl, plain, tsv)
@@ -313,4 +312,7 @@ pub enum Commands {
 
     /// Manage provider roots for skill sources
     Providers(commands::providers::ProvidersArgs),
+
+    /// List every subcommand and option (full CLI surface as a tree)
+    Commands(commands::commands::CommandsArgs),
 }

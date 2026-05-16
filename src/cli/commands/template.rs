@@ -145,13 +145,18 @@ fn run_apply(ctx: &AppContext, args: &TemplateApplyArgs) -> Result<()> {
     };
 
     let rendered = render_template(template, &context)?;
-    let spec = parse_markdown(&rendered)?;
+    let mut spec = parse_markdown(&rendered)?;
 
     if spec.metadata.id.trim().is_empty() {
         return Err(MsError::ValidationFailed(
             "template produced empty skill id".to_string(),
         ));
     }
+    // Ensure provider/canonical_id/display_id are populated. Without this,
+    // template-created skills land in storage with empty `provider`,
+    // `canonical_id`, and `display_id`, which corrupts list/TSV output and
+    // breaks `ms show <canonical-id>` lookups.
+    spec.metadata.normalize_ids();
     if ctx.git.skill_exists(&spec.metadata.id) {
         return Err(MsError::ValidationFailed(format!(
             "skill already exists: {}",

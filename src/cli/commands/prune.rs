@@ -422,7 +422,7 @@ fn build_proposals(ctx: &AppContext, args: &AnalyzeArgs, dry_run: bool) -> Resul
             let mut records = Vec::new();
             for source in &proposal.sources {
                 let Some(skill) = ctx.db.get_skill(source)? else {
-                    return Err(MsError::SkillNotFound(format!("skill not found: {source}")));
+                    return Err(MsError::SkillNotFound(source.to_string()));
                 };
                 records.push(skill);
             }
@@ -931,7 +931,7 @@ fn apply_merge(
     let mut records = Vec::new();
     for source in sources {
         let Some(skill) = ctx.db.get_skill(source)? else {
-            return Err(MsError::SkillNotFound(format!("skill not found: {source}")));
+            return Err(MsError::SkillNotFound(source.to_string()));
         };
         records.push(skill);
     }

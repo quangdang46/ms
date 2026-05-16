@@ -197,12 +197,12 @@ impl ProviderDiscovery {
         for skill_path in &skill_files {
             match Self::parse_single_skill(skill_path, provider) {
                 Ok(skill) => skills.push(skill),
-                Err(e) => {
+                Err(_e) => {
                     #[cfg(debug_assertions)]
                     eprintln!(
                         "debug: failed to parse skill at {}: {}",
                         skill_path.display(),
-                        e
+                        _e
                     );
                 }
             }

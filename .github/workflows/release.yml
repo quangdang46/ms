@@ -83,11 +83,18 @@ jobs:
             os: ubuntu-latest
             archive: tar.gz
             cross: false
-          # DISABLED: musl target requires vendored OpenSSL - see Cargo.toml
-          # - target: x86_64-unknown-linux-musl
-          #   os: ubuntu-latest
-          #   archive: tar.gz
-          #   cross: false
+          # Static musl builds — work on any Linux glibc version, including
+          # Ubuntu 22.04 LTS (glibc 2.35) where the gnu binary fails with
+          # "GLIBC_2.38 not found" because GitHub's ubuntu-latest now ships
+          # glibc 2.39. install.sh prefers the musl variant on older glibc.
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            archive: tar.gz
+            cross: false
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            archive: tar.gz
+            cross: true
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             archive: tar.gz
@@ -120,7 +127,7 @@ jobs:
           key: release-${{ matrix.target }}
           cache-on-failure: true
 
-      - name: Install cross-compilation tools (Linux ARM)
+      - name: Install cross-compilation tools (Linux ARM gnu)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo apt-get update
@@ -133,23 +140,52 @@ jobs:
           # AR for openssl-src and other build scripts that need the archiver
           echo "AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar" >> $GITHUB_ENV
 
-      - name: Install musl tools (Linux musl)
+      - name: Install musl tools (Linux musl x86_64)
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
+          echo "CC_x86_64_unknown_linux_musl=musl-gcc" >> $GITHUB_ENV
+          echo "AR_x86_64_unknown_linux_musl=ar" >> $GITHUB_ENV
+          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc" >> $GITHUB_ENV
+
+      - name: Install cross-compilation tools (Linux ARM musl)
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          # Use cargo-zigbuild which handles musl + cross-arch reliably.
+          # It bundles its own libc / linker so we don't need to track down
+          # an aarch64-linux-musl-gcc package.
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+          pip3 install --user ziglang
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          cargo install --locked cargo-zigbuild
 
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }} --locked
+        run: |
+          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-musl" ]]; then
+            cargo zigbuild --release --target ${{ matrix.target }} --locked
+          else
+            cargo build --release --target ${{ matrix.target }} --locked
+          fi
+        shell: bash
 
       - name: Strip binary (Unix)
         if: matrix.os != 'windows-latest'
         run: |
-          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} || true
-          else
-            strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} || true
-          fi
+          case "${{ matrix.target }}" in
+            aarch64-unknown-linux-gnu)
+              aarch64-linux-gnu-strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} || true
+              ;;
+            aarch64-unknown-linux-musl)
+              # cargo-zigbuild already strips by virtue of profile.release.strip=true.
+              # No additional cross-strip available, leave as-is.
+              ;;
+            *)
+              strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} || true
+              ;;
+          esac
+        shell: bash
 
       - name: Verify binary
         shell: bash

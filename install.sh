@@ -81,7 +81,24 @@ detect_platform() {
 
     case "$os" in
         linux)
-            os="unknown-linux-gnu"
+            # Prefer the statically-linked musl binary when:
+            #   * we can't determine the host glibc version, OR
+            #   * the host glibc is older than the runner that built the
+            #     `unknown-linux-gnu` artifact (currently glibc 2.39 on
+            #     ubuntu-latest). On Ubuntu 22.04 LTS (glibc 2.35), the gnu
+            #     build fails with `GLIBC_2.38 not found`, so musl is the
+            #     only one that runs.
+            local glibc_version=""
+            if command -v ldd >/dev/null 2>&1; then
+                glibc_version="$(ldd --version 2>/dev/null | awk 'NR==1 {print $NF}')"
+            fi
+            if [[ -z "$glibc_version" ]] || \
+               ! printf '%s\n%s\n' "2.38" "$glibc_version" \
+                 | sort -V -C 2>/dev/null; then
+                os="unknown-linux-musl"
+            else
+                os="unknown-linux-gnu"
+            fi
             ;;
         darwin)
             os="apple-darwin"

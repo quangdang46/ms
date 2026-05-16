@@ -99,6 +99,108 @@ Key behaviors: the classic `config` + `index` + `search` workflow still works, a
 
 ---
 
+## Use ms with Your AI Agent
+
+The fastest way to get value out of `ms` is to tell your coding agent (Claude Code, Codex, Cursor, Gemini-CLI, …) to consult `ms` before it works. Drop the block below into your project's agent instruction file:
+
+| Agent | File to edit |
+|-------|--------------|
+| Claude Code | `AGENTS.md` (or `CLAUDE.md`) |
+| Codex / GPT | `AGENTS.md` |
+| Cursor | `.cursor/rules` or `.cursorrules` |
+| Gemini-CLI | `AGENTS.md` |
+| Generic | `AGENTS.md` at the repo root |
+
+Any of those files works — just append the block. The agent will read it on every session and follow the instructions verbatim.
+
+### Copy this into your `AGENTS.md`
+
+````markdown
+## ms — Skill Lookup (mandatory before non-trivial work)
+
+This project uses [`ms`](https://github.com/quangdang46/ms) to manage reusable
+skills. Before doing any non-trivial coding task, **you MUST first ask `ms`
+whether a relevant skill already exists** and use it. Do not reinvent
+solutions to problems we already have skills for.
+
+### Mandatory protocol
+
+1. **Route first.** Before starting work, run:
+   ```bash
+   ms route "<concise description of the task>" -O json
+   ```
+   Example: `ms route "fix Rust async runtime panic" -O json`.
+
+2. **Load the top match.** If the response has `"decision": "match"`, take the
+   first item in `candidates[]` and run **its `load_command` verbatim**:
+   ```bash
+   ms load <skill-id> --section <slug> -O json
+   ```
+   Read the returned skill content carefully and follow it. Cite the skill id
+   in your reasoning so the user can audit which skill you used.
+
+3. **Fallback to search.** If the route response has `"decision": "no_match"`,
+   broaden with:
+   ```bash
+   ms search "<task>" -O json
+   ```
+   If a result looks promising, load it the same way as step 2.
+
+4. **No useful skill found?** Proceed normally — but if you end up solving
+   something reusable, mention it so we can capture it as a new skill with
+   `ms build --from-cass "<topic>"`.
+
+5. **Record feedback.** After you've used a skill (or tried to), record
+   whether it was helpful so the bandit learns:
+   ```bash
+   ms feedback add <skill-id> --helpful        # it helped
+   ms feedback add <skill-id> --not-helpful    # it didn't apply / was wrong
+   ```
+
+### Output handling
+
+- All `ms ... -O json` commands write JSON to **stdout** and diagnostics to
+  **stderr**. Exit code 0 = success. Parse stdout, ignore stderr unless the
+  exit code is non-zero.
+- Never run bare `ms` (it can launch interactive UI). Always use a
+  subcommand and prefer `-O json` for machine-readable output.
+
+### Quick reference
+
+| When you need to... | Run |
+|---------------------|-----|
+| Find a skill for a task | `ms route "<task>" -O json` |
+| Read a skill | `ms load <skill-id> --section <slug> -O json` |
+| Search by keyword | `ms search "<query>" -O json` |
+| List all skills | `ms list -O json` |
+| Check what context suggests | `ms suggest -O json` |
+| Show provenance for a skill | `ms evidence show <skill-id>` |
+| Health-check the install | `ms doctor` |
+
+### Native MCP integration (optional, recommended)
+
+If your agent supports MCP (Claude Code, Codex with MCP, etc.), point it at:
+
+```bash
+ms mcp serve            # stdio transport
+ms mcp serve --tcp-port 8080   # TCP, for non-stdio clients
+```
+
+This exposes `search`, `load`, `evidence`, `list`, `show`, and `feedback` as
+native tools so the agent can call them directly without shelling out.
+
+### Safety
+
+`ms` runs all destructive shell commands through DCG (Destructive Command
+Guard) and all untrusted text through ACIP (prompt-injection defense). If
+you see `Destructive operation blocked` or `ACIP_*` messages, do not try
+to bypass them — surface the message to the user and ask.
+````
+
+> Tip: this is also a useful artifact to share across machines. If you keep your project's `AGENTS.md` in git, every collaborator's coding agent will follow the same skill-lookup protocol automatically.
+
+---
+
 ## Why This Architecture
 
 ### Dual Persistence: Speed + Accountability
@@ -708,73 +810,6 @@ Key environment variables:
 - `MS_CONFIG` — explicit config path
 - `MS_ROBOT` — force robot mode
 - `MS_SEARCH_USE_EMBEDDINGS` — toggle semantic search
-
----
-
-## Prepared Blurb for AGENTS.md Files
-
-````
-## ms — Meta Skill CLI
-
-Local-first skill management platform with dual persistence (SQLite + Git), hybrid search (BM25 + hash embeddings via RRF), multi-layer security (ACIP injection defense + DCG command safety), adaptive suggestions (Thompson sampling bandit), and native AI agent integration (MCP server).
-
-`ms init` can auto-discover provider skill folders and snapshot them into `.ms/archive`, but classic project-local `ms config` + `ms index` workflows still work too.
-
-### Core Workflow
-
-```bash
-ms init                              # Initialize
-ms config skill_paths.project '["./skills"]'
-ms index                             # Index skills
-ms search "query"                    # Hybrid search
-ms suggest                           # Context-aware recommendations
-ms load skill-name --pack 2000       # Token-constrained loading
-```
-
-### Route-First Agent Loop
-
-```bash
-ms route "<task>" -O json
-ms load <canonical-id> --section <slug> -O json
-ms search "<task>" -O json           # only when route returns no_match
-ms providers sync                    # when provider skill sources change
-ms providers doctor                  # diagnose degraded source roots
-```
-
-### For AI Agents
-
-```bash
-ms mcp serve                         # Start MCP server
-ms route "query" -O json             # Primary task-to-skill routing
-ms load <canonical-id> --section <slug> -O json
-ms search "query" -O json            # Fallback/discovery path
-```
-
-### Key Commands
-
-| Command | Purpose |
-|---------|---------|
-| `ms route` | Route a task to the best canonical skill match |
-| `ms search` | Hybrid search (BM25 + semantic) |
-| `ms suggest` | Context-aware suggestions with bandit optimization |
-| `ms load` | Progressive disclosure with token packing |
-| `ms providers` | Manage and diagnose provider roots |
-| `ms graph` | Dependency analysis via bv |
-| `ms security` | ACIP prompt injection defense |
-| `ms safety` | DCG command safety gates |
-| `ms evidence` | Provenance tracking |
-| `ms antipatterns` | Failure pattern detection |
-| `ms template` | Curated authoring templates |
-| `ms bundle` | Portable skill packages |
-| `ms backup` | Snapshot and restore ms state |
-| `ms sync` | Multi-machine synchronization |
-| `ms mcp` | MCP server for AI agents |
-
-Notes:
-- Canonical IDs use `provider/skill-id`.
-- `ms route` is the primary entry point for agents; `ms search` remains useful for discovery and fallback.
-- Deleted provider folders do not break runtime reads, but `ms providers doctor` will report degraded source state until the roots come back.
-````
 
 ---
 

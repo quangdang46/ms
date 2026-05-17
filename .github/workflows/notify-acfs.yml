@@ -32,6 +32,8 @@ jobs:
     # Only notify on push to main, not PRs
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    env:
+      ACFS_DISPATCH_TOKEN: ${{ secrets.ACFS_DISPATCH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,11 +60,11 @@ jobs:
         # ACFS_DISPATCH_TOKEN is an optional PAT used to ping the ACFS repo when
         # the installer changes. Skip the step entirely (and never fail the job)
         # when the secret is not configured in this fork or repo settings.
-        if: ${{ secrets.ACFS_DISPATCH_TOKEN != '' }}
+        if: ${{ env.ACFS_DISPATCH_TOKEN != '' }}
         continue-on-error: true
         uses: peter-evans/repository-dispatch@v4
         with:
-          token: ${{ secrets.ACFS_DISPATCH_TOKEN }}
+          token: ${{ env.ACFS_DISPATCH_TOKEN }}
           repository: quangdang46/agentic_coding_flywheel_setup
           event-type: installer-updated
           client-payload: |
@@ -76,8 +78,17 @@ jobs:
             }
 
       - name: Log notification
+        if: ${{ env.ACFS_DISPATCH_TOKEN != '' }}
         run: |
           echo "::notice::Notified ACFS about installer change"
+          echo "Repository: ${{ github.repository }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "SHA256: ${{ steps.checksum.outputs.sha256 }}"
+
+      - name: Log skipped notification
+        if: ${{ env.ACFS_DISPATCH_TOKEN == '' }}
+        run: |
+          echo "::notice::ACFS_DISPATCH_TOKEN is not configured; skipping ACFS notification"
           echo "Repository: ${{ github.repository }}"
           echo "Commit: ${{ github.sha }}"
           echo "SHA256: ${{ steps.checksum.outputs.sha256 }}"

@@ -13,11 +13,11 @@ pub struct DiGraph {
     /// Reverse lookup: ID string -> index
     node_index: HashMap<String, usize>,
 
-    /// Forward adjacency: adj[u] = vec of nodes that u points to
-    /// (u depends on these nodes)
+    /// Forward adjacency: `adj[u]` = vec of nodes that `u` points to
+    /// (`u` depends on these nodes)
     adj: Vec<Vec<usize>>,
 
-    /// Reverse adjacency: rev_adj[v] = vec of nodes pointing to v
+    /// Reverse adjacency: `rev_adj[v]` = vec of nodes pointing to `v`
     /// (these nodes depend on v)
     rev_adj: Vec<Vec<usize>>,
 

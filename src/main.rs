@@ -72,7 +72,10 @@ fn apply_process_output_overrides(cli: &Cli) {
 
 fn run(cli: &Cli) -> Result<()> {
     if let Commands::Init(args) = &cli.command {
-        return ms::cli::commands::init::run_without_context(cli.robot, args);
+        return ms::cli::commands::init::run_without_context(
+            cli.output_format() != ms::cli::OutputFormat::Human,
+            args,
+        );
     }
     let ctx = AppContext::from_cli(cli)?;
     ms::cli::commands::run(&ctx, &cli.command)

@@ -47,6 +47,7 @@ fn test_doctor_robot_emits_pure_json() {
     // Initialise the workspace first so doctor has something to inspect.
     let mut init = Command::cargo_bin("ms").unwrap();
     init.env("MS_ROOT", dir.path())
+        .env("HOME", dir.path())
         .args(["init", "--robot"])
         .assert()
         .success();
@@ -54,6 +55,7 @@ fn test_doctor_robot_emits_pure_json() {
     let mut doctor = Command::cargo_bin("ms").unwrap();
     let assert = doctor
         .env("MS_ROOT", dir.path())
+        .env("HOME", dir.path())
         .args(["doctor", "--robot"])
         .assert()
         .success();

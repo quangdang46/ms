@@ -48,7 +48,7 @@ fn run_with_robot(robot_mode: bool, args: &InitArgs) -> Result<()> {
                 config_path.display()
             )));
         }
-    } else if target.exists() && !args.force {
+    } else if local_target_initialized(&target, &config_path) && !args.force {
         return Err(MsError::Config(format!(
             "already initialized at {}",
             target.display()
@@ -386,6 +386,13 @@ fn config_path_for(target: &Path, global: bool) -> Result<PathBuf> {
     Ok(target.join("config.toml"))
 }
 
+fn local_target_initialized(target: &Path, config_path: &Path) -> bool {
+    config_path.exists()
+        || target.join("ms.db").exists()
+        || target.join("archive").is_dir()
+        || target.join("index").is_dir()
+}
+
 fn global_ms_root() -> Result<PathBuf> {
     let data_dir = dirs::data_dir()
         .ok_or_else(|| MsError::MissingConfig("data directory not found".to_string()))?;
@@ -393,6 +400,9 @@ fn global_ms_root() -> Result<PathBuf> {
 }
 
 fn local_ms_root() -> Result<PathBuf> {
+    if let Ok(root) = std::env::var("MS_ROOT") {
+        return Ok(PathBuf::from(root));
+    }
     let cwd = std::env::current_dir()?;
     Ok(cwd.join(".ms"))
 }

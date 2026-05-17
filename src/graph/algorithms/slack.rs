@@ -11,7 +11,7 @@ use crate::graph::engine::graph::DiGraph;
 ///
 /// Slack = (critical path length) - (longest path through this node)
 ///
-/// Where "longest path through node v" = dist_from_start[v] + dist_to_end[v]
+/// Where "longest path through node `v`" = `dist_from_start[v] + dist_to_end[v]`
 ///
 /// # Algorithm
 /// 1. Topological sort

@@ -17,12 +17,12 @@ use std::collections::HashSet;
 ///
 /// # Algorithm
 /// Uses DFS to compute discovery times and low-link values:
-/// - disc[v]: discovery time of vertex v
-/// - low[v]: minimum discovery time reachable from subtree of v
+/// - `disc[v]`: discovery time of vertex `v`
+/// - `low[v]`: minimum discovery time reachable from subtree of `v`
 ///
-/// A vertex v is an articulation point if:
-/// 1. v is root of DFS tree and has >1 children, OR
-/// 2. v is not root and has child u with low[u] >= disc[v]
+/// A vertex `v` is an articulation point if:
+/// 1. `v` is root of DFS tree and has >1 children, OR
+/// 2. `v` is not root and has child `u` with `low[u] >= disc[v]`
 ///
 /// # Returns
 /// Vector of node indices that are articulation points.

@@ -8,7 +8,7 @@ use crate::graph::engine::graph::DiGraph;
 
 /// Compute critical path heights (depth in DAG).
 ///
-/// Height[v] = 1 + max(height of predecessors)
+/// `Height[v] = 1 + max(height of predecessors)`
 /// Roots (no predecessors) have height 1.
 ///
 /// # Arguments

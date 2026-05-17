@@ -457,8 +457,11 @@ main() {
     # and reinstall over the broken binary. This is the case Ubuntu 22.04 LTS
     # users hit and previously had to fix manually.
     if [[ $using_fallback -eq 0 ]] && [[ "$primary_platform" == *unknown-linux-gnu ]]; then
-        local verify_stderr
-        verify_stderr=$("${INSTALL_DIR}/${BINARY_NAME}" --version 2>&1 1>/dev/null) || verify_stderr="$verify_stderr"
+        local verify_stderr=""
+        # Capture stderr (with stdout discarded) for the runtime probe so we
+        # can surface the GLIBC error to the user; we intentionally ignore the
+        # non-zero exit because that's the case we're handling.
+        verify_stderr=$("${INSTALL_DIR}/${BINARY_NAME}" --version 2>&1 1>/dev/null) || true
         if ! "${INSTALL_DIR}/${BINARY_NAME}" --version >/dev/null 2>&1; then
             warn "Installed binary failed to run; likely GLIBC mismatch."
             warn "Falling back to statically-linked musl build automatically..."

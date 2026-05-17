@@ -375,61 +375,111 @@ main() {
     local archive_url="${base_url}/${archive_name}"
     local checksums_url="${base_url}/SHA256SUMS.txt"
 
-    # Linux libc fallback: if the gnu artifact 404s, try the musl artifact
-    # before giving up. Older glibc hosts (Ubuntu 22.04 LTS, etc.) need this
-    # to avoid the silent install failure documented in the project's bug
-    # report.
+    # Linux libc fallback: if the gnu artifact 404s OR the downloaded binary
+    # fails to run (typically GLIBC version mismatch on older Linux), try the
+    # statically-linked musl artifact before giving up. Older glibc hosts
+    # (Ubuntu 22.04 LTS ships glibc 2.35) hit this when the release pipeline
+    # builds the gnu artifact on a newer runner (glibc 2.38/2.39).
+    install_artifact() {
+        local archive_name="$1"
+        local archive_url="$2"
+
+        if [[ "$VERIFY" == "true" ]]; then
+            download "$checksums_url" "${temp_dir}/SHA256SUMS.txt" || {
+                err "Could not download checksums file: $checksums_url"
+                return 1
+            }
+            verify_checksum "${temp_dir}/${archive_name}" "${temp_dir}/SHA256SUMS.txt" || return 1
+        else
+            warn "Checksum verification skipped (--no-verify)"
+        fi
+
+        log "Extracting..."
+        local extract_dir="${temp_dir}/extract-${archive_name%.tar.gz}"
+        rm -rf "$extract_dir"
+        mkdir -p "$extract_dir"
+        tar -xzf "${temp_dir}/${archive_name}" -C "$extract_dir" || {
+            err "Failed to extract archive"
+            return 1
+        }
+
+        local binary_path
+        binary_path=$(find "$extract_dir" -name "$BINARY_NAME" -type f -executable 2>/dev/null | head -1)
+        if [[ -z "$binary_path" ]]; then
+            binary_path=$(find "$extract_dir" -name "$BINARY_NAME" -type f 2>/dev/null | head -1)
+        fi
+        if [[ -z "$binary_path" ]]; then
+            err "Could not find $BINARY_NAME in archive"
+            return 1
+        fi
+
+        mkdir -p "$INSTALL_DIR"
+        mv -f "$binary_path" "${INSTALL_DIR}/${BINARY_NAME}"
+        chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
+        return 0
+    }
+
+    # Capture the original gnu artifact info up front so we can fall back to
+    # musl whether the download 404s or the resulting binary fails to run.
+    local primary_archive_name="$archive_name"
+    local primary_archive_url="$archive_url"
+    local primary_platform="$platform"
+    local using_fallback=0
+
     local primary_failed=0
-    if ! download "$archive_url" "${temp_dir}/${archive_name}"; then
+    if ! download "$primary_archive_url" "${temp_dir}/${primary_archive_name}"; then
         primary_failed=1
     fi
 
-    if [[ $primary_failed -eq 1 ]] && [[ "$platform" == *unknown-linux-gnu ]]; then
+    if [[ $primary_failed -eq 1 ]] && [[ "$primary_platform" == *unknown-linux-gnu ]]; then
         warn "gnu artifact unavailable; trying statically-linked musl build..."
-        platform="${platform%-unknown-linux-gnu}-unknown-linux-musl"
+        platform="${primary_platform%-unknown-linux-gnu}-unknown-linux-musl"
         archive_name="ms-${version_for_url}-${platform}.tar.gz"
         archive_url="${base_url}/${archive_name}"
         if download "$archive_url" "${temp_dir}/${archive_name}"; then
             primary_failed=0
+            using_fallback=1
         fi
     fi
 
     if [[ $primary_failed -eq 1 ]]; then
-        die "Download failed: $archive_url"
+        die "Download failed: $primary_archive_url"
     fi
 
-    if [[ "$VERIFY" == "true" ]]; then
-        download "$checksums_url" "${temp_dir}/SHA256SUMS.txt" || {
-            die "Could not download checksums file: $checksums_url"
-        }
-        verify_checksum "${temp_dir}/${archive_name}" "${temp_dir}/SHA256SUMS.txt"
-    else
-        warn "Checksum verification skipped (--no-verify)"
-    fi
-
-    # Extract
-    log "Extracting..."
-    tar -xzf "${temp_dir}/${archive_name}" -C "$temp_dir" || {
-        die "Failed to extract archive"
-    }
-
-    # Find the binary (might be at root or in a subdirectory)
-    local binary_path
-    binary_path=$(find "$temp_dir" -name "$BINARY_NAME" -type f -executable 2>/dev/null | head -1)
-    if [[ -z "$binary_path" ]]; then
-        binary_path=$(find "$temp_dir" -name "$BINARY_NAME" -type f 2>/dev/null | head -1)
-    fi
-
-    if [[ -z "$binary_path" ]]; then
-        die "Could not find $BINARY_NAME in archive"
-    fi
-
-    # Install
-    mkdir -p "$INSTALL_DIR"
-    mv "$binary_path" "${INSTALL_DIR}/${BINARY_NAME}"
-    chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
+    install_artifact "$archive_name" "$archive_url" || die "Installation failed"
 
     log "${GREEN}${BOLD}Successfully installed ms ${VERSION} to ${INSTALL_DIR}/${BINARY_NAME}${NC}"
+
+    # Detect GLIBC-mismatch failures on linux-gnu *after* install: the
+    # download succeeded but the binary refuses to run because it was built
+    # against a newer glibc than the host provides. In that case, transparently
+    # re-download the musl artifact (statically linked, no glibc dependency)
+    # and reinstall over the broken binary. This is the case Ubuntu 22.04 LTS
+    # users hit and previously had to fix manually.
+    if [[ $using_fallback -eq 0 ]] && [[ "$primary_platform" == *unknown-linux-gnu ]]; then
+        local verify_stderr
+        verify_stderr=$("${INSTALL_DIR}/${BINARY_NAME}" --version 2>&1 1>/dev/null) || verify_stderr="$verify_stderr"
+        if ! "${INSTALL_DIR}/${BINARY_NAME}" --version >/dev/null 2>&1; then
+            warn "Installed binary failed to run; likely GLIBC mismatch."
+            warn "Falling back to statically-linked musl build automatically..."
+            if [[ -n "$verify_stderr" ]]; then
+                warn "  (host reported: ${verify_stderr%%$'\n'*})"
+            fi
+            platform="${primary_platform%-unknown-linux-gnu}-unknown-linux-musl"
+            archive_name="ms-${version_for_url}-${platform}.tar.gz"
+            archive_url="${base_url}/${archive_name}"
+            if download "$archive_url" "${temp_dir}/${archive_name}"; then
+                if install_artifact "$archive_name" "$archive_url"; then
+                    using_fallback=1
+                    log "Reinstalled with musl artifact: ${GREEN}${archive_name}${NC}"
+                else
+                    err "Could not reinstall with musl artifact"
+                fi
+            else
+                err "Could not download musl fallback artifact: $archive_url"
+            fi
+        fi
+    fi
 
     # Check PATH
     if ! echo "$PATH" | tr ':' '\n' | grep -q "^${INSTALL_DIR}$"; then

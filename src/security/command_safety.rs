@@ -37,6 +37,11 @@ pub struct SafetyGate {
     guard: DcgGuard,
     dcg_version: Option<String>,
     require_verbatim_approval: bool,
+    /// When `true`, commands are blocked if DCG cannot be invoked. When
+    /// `false`, the gate fails open (with a warning) when DCG is missing,
+    /// matching the documented "optional dependency" status. See
+    /// `SafetyConfig::require_dcg`.
+    require_dcg: bool,
     db: Option<Arc<Database>>,
 }
 
@@ -53,6 +58,7 @@ impl SafetyGate {
             guard,
             dcg_version,
             require_verbatim_approval: ctx.config.safety.require_verbatim_approval,
+            require_dcg: ctx.config.safety.require_dcg,
             db: Some(ctx.db.clone()),
         }
     }
@@ -81,6 +87,7 @@ impl SafetyGate {
             guard,
             dcg_version,
             require_verbatim_approval: config.safety.require_verbatim_approval,
+            require_dcg: config.safety.require_dcg,
             db,
         })
     }
@@ -107,20 +114,38 @@ impl SafetyGate {
             }
         };
 
-        if !decision.allowed {
-            // If DCG is unavailable, provide a specific error explaining the situation
-            if dcg_unavailable {
+        // DCG is documented as an OPTIONAL dependency (`ms requirements` lists it as
+        // optional). When it's not installed, the safety gate has nothing to evaluate.
+        // Two policies:
+        //   * fail-open (default): warn loudly, audit-log the call, and allow it.
+        //     This keeps `ms edit`, `ms simulate`, and the destructive workflows
+        //     usable on machines without DCG (matches the documented contract).
+        //   * fail-closed (`safety.require_dcg = true` or `MS_REQUIRE_DCG=1`): block
+        //     the command. Use this in environments where command auditing is
+        //     mandatory.
+        if dcg_unavailable {
+            if self.require_dcg_active() {
                 self.log_event(command, &decision, session_id)?;
                 return Err(MsError::DestructiveBlocked(format!(
-                    "command blocked (safety system unavailable): {}. {}",
+                    "command blocked (safety.require_dcg is enabled but dcg is unavailable): {}. {}",
                     decision.reason,
-                    decision
-                        .remediation
-                        .as_deref()
-                        .unwrap_or("Install DCG to enable command evaluation")
+                    decision.remediation.as_deref().unwrap_or(
+                        "Install DCG, set safety.dcg_bin, or disable safety.require_dcg"
+                    )
                 )));
             }
 
+            warn!(
+                "safety gate: DCG unavailable; allowing command without policy evaluation \
+                 (set safety.require_dcg=true to block instead): {command}"
+            );
+            decision.allowed = true;
+            decision.reason = format!("dcg unavailable (fail-open): {}", decision.reason);
+            self.log_event(command, &decision, session_id)?;
+            return Ok(());
+        }
+
+        if !decision.allowed {
             if self.require_verbatim_approval && decision.tier >= SafetyTier::Danger {
                 if approval_matches(command) {
                     decision.approved = true;
@@ -145,6 +170,19 @@ impl SafetyGate {
         }
 
         Ok(())
+    }
+
+    /// Effective `require_dcg` setting: the config value OR the `MS_REQUIRE_DCG`
+    /// environment variable (so CI/scripts can force fail-closed mode without
+    /// touching config.toml).
+    fn require_dcg_active(&self) -> bool {
+        if self.require_dcg {
+            return true;
+        }
+        matches!(
+            std::env::var("MS_REQUIRE_DCG").ok().as_deref(),
+            Some("1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON")
+        )
     }
 
     fn log_event(

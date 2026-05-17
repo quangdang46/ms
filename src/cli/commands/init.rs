@@ -86,7 +86,7 @@ fn init_human_global(config_path: &Path, args: &InitArgs) -> Result<()> {
     );
     println!();
     println!("Add skill paths with:");
-    println!("  ms config add skill_paths.global ~/my-skills");
+    println!("  ms config skill_paths.global '[\"~/my-skills\"]'");
 
     Ok(())
 }
@@ -216,7 +216,7 @@ fn init_human(target: &Path, args: &InitArgs) -> Result<()> {
 
     println!();
     println!("Add skill paths with:");
-    println!("  ms config add skill_paths.project ./skills");
+    println!("  ms config skill_paths.project '[\"./skills\"]'");
 
     Ok(())
 }
@@ -339,6 +339,9 @@ dcg_bin = "dcg"
 dcg_packs = []
 dcg_explain_format = "json"
 require_verbatim_approval = true
+# When `true`, block commands if DCG is unavailable. When `false` (default),
+# fail open with a warning so optional DCG installs do not break ms edit/simulate.
+require_dcg = false
 "#
     } else {
         r#"# ms configuration (project-local)
@@ -370,6 +373,9 @@ dcg_bin = "dcg"
 dcg_packs = []
 dcg_explain_format = "json"
 require_verbatim_approval = true
+# When `true`, block commands if DCG is unavailable. When `false` (default),
+# fail open with a warning so optional DCG installs do not break ms edit/simulate.
+require_dcg = false
 "#
     };
 

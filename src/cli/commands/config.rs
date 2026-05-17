@@ -99,6 +99,21 @@ pub fn run(ctx: &AppContext, args: &ConfigArgs) -> Result<()> {
         return unset_key(&ctx, key);
     }
 
+    // Reject stray trailing positionals like `ms config skill_paths.project add ./skills`.
+    // Without this check, the third positional ("./skills") was silently dropped and the
+    // intended array key was overwritten with the literal string "add".
+    if let (Some(key), Some(value), Some(extra)) = (
+        args.key.as_deref(),
+        args.value.as_deref(),
+        args.extra.as_deref(),
+    ) {
+        return Err(crate::error::MsError::Config(format!(
+            "ms config takes at most two positional arguments (got 3: `{key}`, `{value}`, `{extra}`).\n\
+             There is no `add` subcommand. To set an array-valued key, pass the full TOML array:\n  \
+             ms config {key} '[\"{extra}\"]'"
+        )));
+    }
+
     if let (Some(key), Some(value)) = (args.key.as_ref(), args.value.as_ref()) {
         return set_key(&ctx, key, value);
     }
@@ -139,10 +154,27 @@ fn get_key(ctx: &ConfigContext, key: &str) -> Result<()> {
 fn set_key(ctx: &ConfigContext, key: &str, raw_value: &str) -> Result<()> {
     // Validate the key is a known configuration path. set_path writes into
     // the raw TOML document, so it would silently accept unknown keys.
-    let _ = config_value_at(&ctx.config, key)?;
+    let current = config_value_at(&ctx.config, key)?;
 
     let mut doc = load_config_doc(&ctx.config_path)?;
     let value = parse_value(raw_value)?;
+
+    // Reject type-incompatible writes. Without this check, running
+    // `ms config skill_paths.project add ./skills` (where `add` is silently
+    // parsed as the value because clap accepts three positionals) would
+    // overwrite an array-valued key with a bare string, leaving the on-disk
+    // config in a state that fails to parse on the next ms invocation.
+    if !value_kinds_compatible(&current, &value) {
+        return Err(crate::error::MsError::Config(format!(
+            "type mismatch for `{key}`: existing value is {} but `{}` parses as {}.\n  \
+             hint: to set an array, pass it as TOML, e.g. \
+             ms config {key} '[\"item1\", \"item2\"]'",
+            type_label(&current),
+            raw_value,
+            type_label(&value),
+        )));
+    }
+
     set_path(&mut doc, key, value.clone())?;
     write_config_doc(&ctx.config_path, &doc)?;
 
@@ -297,5 +329,73 @@ fn format_value(value: &toml::Value) -> String {
     match value {
         toml::Value::String(s) => s.clone(),
         _ => value.to_string(),
+    }
+}
+
+/// Stable, human-friendly name for a TOML value kind. Used in error messages
+/// when the user tries to overwrite a key with a value of an incompatible type.
+fn type_label(value: &toml::Value) -> &'static str {
+    match value {
+        toml::Value::String(_) => "string",
+        toml::Value::Integer(_) => "integer",
+        toml::Value::Float(_) => "float",
+        toml::Value::Boolean(_) => "boolean",
+        toml::Value::Datetime(_) => "datetime",
+        toml::Value::Array(_) => "array",
+        toml::Value::Table(_) => "table",
+    }
+}
+
+/// Decide whether a new value can replace an existing config value. Both
+/// sides must use the same TOML kind; the one exception is that empty
+/// tables are accepted in place of any value because the in-memory defaults
+/// may serialize an absent key as an empty table.
+fn value_kinds_compatible(current: &toml::Value, candidate: &toml::Value) -> bool {
+    std::mem::discriminant(current) == std::mem::discriminant(candidate)
+        || matches!(current, toml::Value::Table(t) if t.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(raw: &str) -> toml::Value {
+        parse_value(raw).expect("parse_value should succeed for known-good input")
+    }
+
+    #[test]
+    fn type_labels_for_common_kinds() {
+        assert_eq!(type_label(&parse("\"hello\"")), "string");
+        assert_eq!(type_label(&parse("42")), "integer");
+        assert_eq!(type_label(&parse("true")), "boolean");
+        assert_eq!(type_label(&parse("[]")), "array");
+    }
+
+    #[test]
+    fn value_kinds_compatible_matches_same_kinds() {
+        assert!(value_kinds_compatible(
+            &parse("[\"a\"]"),
+            &parse("[\"b\", \"c\"]")
+        ));
+        assert!(value_kinds_compatible(&parse("\"a\""), &parse("\"b\"")));
+        assert!(value_kinds_compatible(&parse("1"), &parse("2")));
+    }
+
+    #[test]
+    fn value_kinds_compatible_rejects_array_overwrite_with_string() {
+        // This is the exact failure mode from `ms config skill_paths.project add ./skills`:
+        // an array-valued key is silently overwritten with a string, corrupting the
+        // on-disk config until the user manually re-runs `ms init`.
+        assert!(!value_kinds_compatible(
+            &parse("[\"./skills\"]"),
+            &parse("\"add\"")
+        ));
+    }
+
+    #[test]
+    fn value_kinds_compatible_allows_empty_table_as_unknown_default() {
+        let empty = toml::Value::Table(toml::map::Map::new());
+        assert!(value_kinds_compatible(&empty, &parse("\"anything\"")));
+        assert!(value_kinds_compatible(&empty, &parse("[\"a\"]")));
     }
 }

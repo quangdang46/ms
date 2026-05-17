@@ -277,11 +277,14 @@ fn arb_security() -> impl Strategy<Value = SecurityConfig> {
 }
 
 fn arb_safety() -> impl Strategy<Value = SafetyConfig> {
-    (any::<bool>(),).prop_map(|(require_verbatim_approval,)| SafetyConfig {
-        dcg_bin: PathBuf::new(),
-        dcg_packs: vec![],
-        dcg_explain_format: String::new(),
-        require_verbatim_approval,
+    (any::<bool>(), any::<bool>()).prop_map(|(require_verbatim_approval, require_dcg)| {
+        SafetyConfig {
+            dcg_bin: PathBuf::new(),
+            dcg_packs: vec![],
+            dcg_explain_format: String::new(),
+            require_verbatim_approval,
+            require_dcg,
+        }
     })
 }
 

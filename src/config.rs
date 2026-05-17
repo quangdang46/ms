@@ -808,6 +808,13 @@ pub struct SafetyConfig {
     pub dcg_explain_format: String,
     #[serde(default)]
     pub require_verbatim_approval: bool,
+    /// When `true`, every command that goes through the safety gate is blocked
+    /// if DCG cannot be invoked. When `false` (the default) the gate fails
+    /// *open* with a warning when DCG is missing, matching the documented
+    /// "optional dependency" status (`ms requirements` lists DCG as optional).
+    /// Set to `true` in environments where command auditing is mandatory.
+    #[serde(default)]
+    pub require_dcg: bool,
 }
 
 impl Default for SafetyConfig {
@@ -817,6 +824,7 @@ impl Default for SafetyConfig {
             dcg_packs: Vec::new(),
             dcg_explain_format: "json".to_string(),
             require_verbatim_approval: true,
+            require_dcg: false,
         }
     }
 }
@@ -834,6 +842,9 @@ impl SafetyConfig {
         }
         if let Some(value) = patch.require_verbatim_approval {
             self.require_verbatim_approval = value;
+        }
+        if let Some(value) = patch.require_dcg {
+            self.require_dcg = value;
         }
     }
 }
@@ -1117,6 +1128,7 @@ struct SafetyPatch {
     pub dcg_packs: Option<Vec<String>>,
     pub dcg_explain_format: Option<String>,
     pub require_verbatim_approval: Option<bool>,
+    pub require_dcg: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -1497,6 +1509,11 @@ mod tests {
         assert!(config.dcg_packs.is_empty());
         assert_eq!(config.dcg_explain_format, "json");
         assert!(config.require_verbatim_approval);
+        // DCG is documented as an optional dependency. The safety gate must
+        // default to fail-open so machines without DCG can still run ms edit
+        // and ms simulate. Flipping this default would silently regress every
+        // destructive workflow on the documented "DCG missing" setup.
+        assert!(!config.require_dcg);
     }
 
     #[test]

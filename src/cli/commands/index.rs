@@ -120,7 +120,7 @@ pub fn run(ctx: &AppContext, args: &IndexArgs) -> Result<()> {
             println!("{}", "No skill paths configured".yellow());
             println!();
             println!("Add paths with:");
-            println!("  ms config add skill_paths.project ./skills");
+            println!("  ms config skill_paths.project '[\"./skills\"]'");
         }
         return Ok(());
     }

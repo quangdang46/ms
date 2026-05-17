@@ -592,6 +592,9 @@ impl Database {
     }
 
     pub fn search_fts(&self, query: &str, limit: usize) -> Result<Vec<SkillSearchCandidate>> {
+        // Escape the query for FTS5: wrap in double quotes to treat as phrase,
+        // which prevents FTS5 from interpreting hyphens as NOT operators.
+        let escaped_query = format!("\"{}\"", query.replace('"', "\""));
         let mut stmt = self.conn.prepare(
             "SELECT s.id, s.source_layer, s.metadata_json, s.quality_score, s.is_deprecated
              FROM skills_fts f
@@ -600,7 +603,7 @@ impl Database {
              ORDER BY bm25(skills_fts)
              LIMIT ?",
         )?;
-        let rows = stmt.query_map(params![query, limit as i64], |row| {
+        let rows = stmt.query_map(params![escaped_query, limit as i64], |row| {
             Ok(SkillSearchCandidate {
                 id: row.get(0)?,
                 source_layer: row.get(1)?,

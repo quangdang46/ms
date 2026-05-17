@@ -35,7 +35,7 @@ fn test_init_idempotent() {
     let mut fixture = TestFixture::new("test_init_idempotent");
 
     let output1 = fixture.run_ms(&["init"]);
-    let output2 = fixture.run_ms(&["init"]);
+    let output2 = fixture.run_ms(&["init", "--force"]);
 
     assert!(output1.success, "first init failed");
     assert!(output2.success, "second init failed");

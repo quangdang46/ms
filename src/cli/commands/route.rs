@@ -513,15 +513,13 @@ fn tsv_sanitize(value: &str) -> String {
 /// Check if two words share a common prefix of at least 4 characters.
 /// This handles basic stemming: "profiling" matches "profile", "errors" matches "error", etc.
 fn prefix_fuzzy_match(a: &str, b: &str) -> bool {
-    if a.len() < 4 || b.len() < 4 {
+    let a_char_count = a.chars().count();
+    let b_char_count = b.chars().count();
+    if a_char_count < 4 || b_char_count < 4 {
         return false;
     }
-    let min_len = a.len().min(b.len());
     // Check if one starts with the other (for at least 4 chars)
-    if a.len() >= b.len() && &a[..min_len] == b {
-        return true;
-    }
-    if b.len() >= a.len() && &b[..min_len] == a {
+    if a.starts_with(b) || b.starts_with(a) {
         return true;
     }
     // Find common prefix length
@@ -1456,5 +1454,43 @@ mod tests {
                 "suggest_command must not be fabricated"
             );
         }
+    }
+
+    #[test]
+    fn test_prefix_fuzzy_match_with_multibyte_utf8() {
+        // U+2192 RIGHT ARROW is 3 bytes in UTF-8; must not panic on byte-boundary mismatch
+        assert!(!prefix_fuzzy_match("html→screenshot", "git"));
+        assert!(!prefix_fuzzy_match("git", "html→screenshot"));
+        // Two multi-byte strings sharing a prefix
+        assert!(prefix_fuzzy_match("html→screenshot", "html→other"));
+        // Short multi-byte string (< 4 chars) should return false, not panic
+        assert!(!prefix_fuzzy_match("→→→", "→→→→"));
+    }
+
+    #[test]
+    fn test_word_fuzzy_contains_with_multibyte_utf8() {
+        // Skill description containing non-ASCII arrow must not panic
+        assert!(!word_fuzzy_contains(
+            "HTML→screenshot multi-platform",
+            "git commit"
+        ));
+        assert!(word_fuzzy_contains(
+            "HTML→screenshot multi-platform",
+            "multi"
+        ));
+    }
+
+    #[test]
+    fn test_score_skill_with_multibyte_description_does_not_panic() {
+        let skill = make_skill_record(
+            "ckm-design",
+            "CKM Design",
+            "social photos (HTML→screenshot, multi-platform)",
+            vec!["design"],
+        );
+        // Must not panic when scoring skills with multi-byte UTF-8 in description
+        let result = score_skill(&skill, "git commit", false);
+        // Result may or may not match; the important thing is no panic
+        drop(result);
     }
 }

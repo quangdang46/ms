@@ -31,6 +31,7 @@
 //! to reduce latency for repeated operations. See `CacheLayer` for details.
 
 pub mod cache;
+pub mod classifier;
 pub mod content_cache;
 pub mod context;
 pub mod embeddings;
@@ -41,6 +42,7 @@ pub mod tantivy;
 pub mod tantivy_index;
 
 // Re-export main types
+pub use classifier::{classify, SearchStrategy, QueryClass, QueryIntent, QueryType};
 pub use cache::{
     CacheLayer, CacheStats, CachedQueryResult, NegativeRouteEntry, NegativeRouteKey,
     SessionFingerprint,

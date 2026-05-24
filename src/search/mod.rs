@@ -42,11 +42,11 @@ pub mod tantivy;
 pub mod tantivy_index;
 
 // Re-export main types
-pub use classifier::{classify, SearchStrategy, QueryClass, QueryIntent, QueryType};
 pub use cache::{
     CacheLayer, CacheStats, CachedQueryResult, NegativeRouteEntry, NegativeRouteKey,
     SessionFingerprint,
 };
+pub use classifier::{QueryClass, QueryIntent, QueryType, SearchStrategy, classify};
 pub use context::{FilterResult, SearchContext, SearchFilters, SearchLayer};
 pub use embeddings::{ApiEmbedder, Embedder, HashEmbedder, VectorIndex, build_embedder};
 pub use embeddings_local::LocalEmbedder;

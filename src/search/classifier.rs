@@ -58,39 +58,9 @@ const RELATIONSHIP_WORDS: &[&str] = &[
 ];
 
 const _STOPWORDS: &[&str] = &[
-    "a",
-    "an",
-    "and",
-    "are",
-    "as",
-    "at",
-    "be",
-    "by",
-    "do",
-    "does",
-    "for",
-    "from",
-    "has",
-    "have",
-    "how",
-    "if",
-    "in",
-    "is",
-    "it",
-    "not",
-    "of",
-    "on",
-    "or",
-    "the",
-    "to",
-    "was",
-    "what",
-    "when",
-    "where",
-    "which",
-    "who",
-    "why",
-    "with",
+    "a", "an", "and", "are", "as", "at", "be", "by", "do", "does", "for", "from", "has", "have",
+    "how", "if", "in", "is", "it", "not", "of", "on", "or", "the", "to", "was", "what", "when",
+    "where", "which", "who", "why", "with",
 ];
 
 /// Query type classification
@@ -183,7 +153,9 @@ fn regex_matches(text: &str, pattern: &str) -> bool {
             }
             parts.iter().all(|p| {
                 !p.is_empty()
-                    && p.chars().next().map_or(false, |c| c.is_alphabetic() || c == '_')
+                    && p.chars()
+                        .next()
+                        .map_or(false, |c| c.is_alphabetic() || c == '_')
                     && p.chars().all(|c| c.is_alphanumeric() || c == '_')
             })
         }
@@ -242,8 +214,15 @@ fn extract_entities(query: &str) -> Vec<String> {
     let mut prev_upper = false;
 
     for (i, c) in query.chars().enumerate() {
-        if c.is_uppercase() && (i == 0 || prev_upper || !current.ends_with('_') && current.chars().last().map_or(false, |p| !p.is_uppercase())) {
-            if !current.is_empty() && (current.chars().last().map_or(false, |p| p.is_lowercase()) || i == 0) {
+        if c.is_uppercase()
+            && (i == 0
+                || prev_upper
+                || !current.ends_with('_')
+                    && current.chars().last().map_or(false, |p| !p.is_uppercase()))
+        {
+            if !current.is_empty()
+                && (current.chars().last().map_or(false, |p| p.is_lowercase()) || i == 0)
+            {
                 if !current.is_empty() {
                     entities.push(current.clone());
                 }
@@ -462,7 +441,10 @@ mod tests {
         assert_eq!(detect_intent("locate the config file"), QueryIntent::Find);
         assert_eq!(detect_intent("list all providers"), QueryIntent::List);
         assert_eq!(detect_intent("how does routing work"), QueryIntent::How);
-        assert_eq!(detect_intent("where is the main function"), QueryIntent::Where);
+        assert_eq!(
+            detect_intent("where is the main function"),
+            QueryIntent::Where
+        );
         assert_eq!(detect_intent("rust async tutorial"), QueryIntent::General);
     }
 
@@ -488,7 +470,9 @@ mod tests {
     #[test]
     fn test_entity_extraction() {
         let entities = extract_entities("auth middleware");
-        assert!(entities.is_empty() || entities.iter().all(|e| e.chars().any(|c| c.is_uppercase())));
+        assert!(
+            entities.is_empty() || entities.iter().all(|e| e.chars().any(|c| c.is_uppercase()))
+        );
 
         let entities = extract_entities("ConfigManager");
         assert!(!entities.is_empty());
@@ -496,7 +480,11 @@ mod tests {
         let entities = extract_entities("how does the worker handle payloads");
         // May contain "Worker", "Payloads" etc.
         for e in &entities {
-            assert!(e.chars().any(|c| c.is_uppercase()), "Entity '{}' should have uppercase", e);
+            assert!(
+                e.chars().any(|c| c.is_uppercase()),
+                "Entity '{}' should have uppercase",
+                e
+            );
         }
     }
 

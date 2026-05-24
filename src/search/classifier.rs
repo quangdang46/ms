@@ -137,6 +137,16 @@ fn is_symbol_query(query: &str) -> bool {
         return regex_matches(trimmed, SYMBOL_PATTERN_4);
     }
 
+    // Check for pure snake_case identifiers: `save_pretrained`, `foo_bar_baz`
+    // Must be all lowercase with underscores, at least one underscore, no spaces
+    if !trimmed.contains(' ')
+        && trimmed.contains('_')
+        && trimmed.chars().all(|c| c.is_lowercase() || c == '_')
+        && !trimmed.starts_with('_')
+    {
+        return true;
+    }
+
     false
 }
 

@@ -31,6 +31,7 @@
 //! to reduce latency for repeated operations. See `CacheLayer` for details.
 
 pub mod cache;
+pub mod classifier;
 pub mod content_cache;
 pub mod context;
 pub mod embeddings;
@@ -45,6 +46,7 @@ pub use cache::{
     CacheLayer, CacheStats, CachedQueryResult, NegativeRouteEntry, NegativeRouteKey,
     SessionFingerprint,
 };
+pub use classifier::{QueryClass, QueryIntent, QueryType, SearchStrategy, classify};
 pub use context::{FilterResult, SearchContext, SearchFilters, SearchLayer};
 pub use embeddings::{ApiEmbedder, Embedder, HashEmbedder, VectorIndex, build_embedder};
 pub use embeddings_local::LocalEmbedder;

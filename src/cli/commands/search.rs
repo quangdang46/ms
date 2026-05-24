@@ -11,7 +11,7 @@ use crate::cli::formatters::SearchResults;
 use crate::cli::output::{Formattable, OutputFormat};
 use crate::error::{MsError, Result};
 use crate::search::{
-    RrfConfig, SearchFilters, SearchLayer, VectorIndex, build_embedder, fuse_simple,
+    SearchFilters, SearchLayer, SearchStrategy, VectorIndex, build_embedder, fuse_simple,
 };
 
 #[derive(Args, Debug)]
@@ -148,11 +148,13 @@ fn search_hybrid(ctx: &AppContext, args: &SearchArgs, filters: &SearchFilters) -
         .map(|(i, c)| (c.id.clone(), 1.0 / (i + 1) as f32)) // Convert rank to pseudo-score
         .collect();
 
-    // RRF fusion
-    let config = RrfConfig::with_weights(
+    // RRF fusion with adaptive weights based on query type,
+    // respecting user-configured overrides when set
+    let strategy = SearchStrategy::from_query(&args.query).with_config_override(
         ctx.config.search.bm25_weight,
         ctx.config.search.semantic_weight,
     );
+    let config = strategy.to_rrf_config();
     let fused = fuse_simple(&bm25_results, &semantic_results, &config);
 
     // Fetch full skill records and apply filters

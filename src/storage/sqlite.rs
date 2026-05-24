@@ -189,6 +189,44 @@ pub struct ExperimentEventRecord {
     pub created_at: String,
 }
 
+/// FTS5 stopwords to strip from multi-word queries
+const FTS_STOPWORDS: &[&str] = &[
+    "a", "an", "and", "are", "as", "at", "be", "by", "do", "does", "for", "from", "has", "have",
+    "how", "if", "in", "is", "it", "not", "of", "on", "or", "the", "to", "was", "what", "when",
+    "where", "which", "who", "why", "with",
+];
+
+/// Build an FTS5 query string from user input.
+///
+/// - Single-word or symbol-like queries (containing `::`, `_`, or camelCase)
+///   are wrapped in double quotes for exact phrase matching.
+/// - Multi-word natural language queries are split into individual terms
+///   (with stopwords removed) joined by AND for term-based matching.
+fn build_fts_query(query: &str) -> String {
+    let trimmed = query.trim();
+    let words: Vec<&str> = trimmed.split_whitespace().collect();
+
+    // Single word or symbol-like → phrase match
+    if words.len() <= 1 || trimmed.contains("::") {
+        return format!("\"{}\"", trimmed.replace('"', "\"\""));
+    }
+
+    // Multi-word: strip stopwords, quote each term, join with OR for recall
+    let terms: Vec<String> = words
+        .iter()
+        .map(|w| w.to_lowercase())
+        .filter(|w| !FTS_STOPWORDS.contains(&w.as_str()))
+        .map(|w| format!("\"{}\"", w.replace('"', "\"\"")))
+        .collect();
+
+    if terms.is_empty() {
+        // All words were stopwords — fall back to phrase match
+        return format!("\"{}\"", trimmed.replace('"', "\"\""));
+    }
+
+    terms.join(" OR ")
+}
+
 impl Database {
     /// Open database at the given path
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -592,9 +630,7 @@ impl Database {
     }
 
     pub fn search_fts(&self, query: &str, limit: usize) -> Result<Vec<SkillSearchCandidate>> {
-        // Escape the query for FTS5: wrap in double quotes to treat as phrase,
-        // which prevents FTS5 from interpreting hyphens as NOT operators.
-        let escaped_query = format!("\"{}\"", query.replace('"', "\""));
+        let escaped_query = build_fts_query(query);
         let mut stmt = self.conn.prepare(
             "SELECT s.id, s.source_layer, s.metadata_json, s.quality_score, s.is_deprecated
              FROM skills_fts f

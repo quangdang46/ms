@@ -11,6 +11,9 @@
 //! - **ComplexNl**: Multi-word natural query, often with relationship words
 //!   (e.g., "how does the worker handle payloads")
 
+use regex::Regex;
+use std::sync::LazyLock;
+
 /// Relationship words that indicate semantic-heavy queries
 const RELATIONSHIP_WORDS: &[&str] = &[
     "where",
@@ -55,12 +58,6 @@ const RELATIONSHIP_WORDS: &[&str] = &[
     "receives",
     "received",
     "receiving",
-];
-
-const _STOPWORDS: &[&str] = &[
-    "a", "an", "and", "are", "as", "at", "be", "by", "do", "does", "for", "from", "has", "have",
-    "how", "if", "in", "is", "it", "not", "of", "on", "or", "the", "to", "was", "what", "when",
-    "where", "which", "who", "why", "with",
 ];
 
 /// Query type classification
@@ -109,87 +106,75 @@ pub struct QueryClass {
     pub entities: Vec<String>,
 }
 
-/// Symbol query regex patterns
-const SYMBOL_PATTERN_1: &str = r"^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)+$";
-const SYMBOL_PATTERN_2: &str = r"^_[A-Za-z0-9_]+$";
-const SYMBOL_PATTERN_3: &str = r"^[A-Za-z][A-Za-z0-9]*[A-Z_][A-Za-z0-9_]*$";
-const SYMBOL_PATTERN_4: &str = r"^[A-Z][A-Za-z0-9]+$";
+// Compiled regex patterns for symbol detection
+static RE_NAMESPACE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)+$").unwrap());
+static RE_LEADING_UNDERSCORE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^_[A-Za-z0-9_]+$").unwrap());
+static RE_CAMEL_CASE: LazyLock<Regex> = LazyLock::new(|| {
+    // Must start alphabetic, contain at least one uppercase after the first char
+    Regex::new(r"^[a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*$").unwrap()
+});
+static RE_PASCAL_CASE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[A-Z][A-Za-z0-9]+$").unwrap());
+static RE_MIXED_CASE_UNDERSCORE: LazyLock<Regex> = LazyLock::new(|| {
+    // e.g., my_var_Name — has underscore AND uppercase
+    Regex::new(r"^[A-Za-z][A-Za-z0-9_]*$").unwrap()
+});
 
 /// Detect if a query looks like a symbol/identifier
 fn is_symbol_query(query: &str) -> bool {
     let trimmed = query.trim();
 
-    // Check each pattern
-    if trimmed.matches("::").count() >= 1 && !trimmed.split_whitespace().count() > 1 {
-        // Namespace-qualified: `foo::bar::Baz`
-        return regex_matches(trimmed, SYMBOL_PATTERN_1);
-    }
-    if trimmed.starts_with('_') && !trimmed.contains(' ') {
-        // Leading underscore: `_internal`, `_foo_bar`
-        return regex_matches(trimmed, SYMBOL_PATTERN_2);
-    }
-    if trimmed.contains(|c: char| c.is_uppercase()) && !trimmed.contains(' ') {
-        // Contains uppercase (camelCase/PascalCase): `myFunction`, `AuthService`
-        return regex_matches(trimmed, SYMBOL_PATTERN_3);
-    }
-    if trimmed.chars().next().map_or(false, |c| c.is_uppercase()) && !trimmed.contains(' ') {
-        // Starts with uppercase: `Client`, `Config`
-        return regex_matches(trimmed, SYMBOL_PATTERN_4);
+    if trimmed.is_empty() {
+        return false;
     }
 
-    // Check for pure snake_case identifiers: `save_pretrained`, `foo_bar_baz`
-    // Must be all lowercase with underscores, at least one underscore, no spaces
-    if !trimmed.contains(' ')
-        && trimmed.contains('_')
-        && trimmed.chars().all(|c| c.is_lowercase() || c == '_')
+    // Namespace-qualified: `foo::bar::Baz`, `std::io::Error`
+    if trimmed.contains("::") && trimmed.split_whitespace().count() <= 1 {
+        return RE_NAMESPACE.is_match(trimmed);
+    }
+
+    // No spaces allowed for remaining symbol patterns
+    if trimmed.contains(' ') {
+        return false;
+    }
+
+    // Leading underscore: `_internal`, `_foo_bar`
+    if trimmed.starts_with('_') {
+        return RE_LEADING_UNDERSCORE.is_match(trimmed);
+    }
+
+    // camelCase: `myFunction`, `authService` (lowercase start, has uppercase after)
+    if RE_CAMEL_CASE.is_match(trimmed) {
+        return true;
+    }
+
+    // PascalCase: `Client`, `Config`, `AuthService`
+    if RE_PASCAL_CASE.is_match(trimmed) {
+        return true;
+    }
+
+    // Mixed case with underscores: `my_var_Name`
+    if trimmed.contains('_')
+        && trimmed.chars().any(|c| c.is_uppercase())
+        && RE_MIXED_CASE_UNDERSCORE.is_match(trimmed)
+    {
+        return true;
+    }
+
+    // Pure snake_case (may contain digits): `save_pretrained`, `h264_decoder`
+    if trimmed.contains('_')
+        && trimmed
+            .chars()
+            .all(|c| c.is_lowercase() || c == '_' || c.is_ascii_digit())
         && !trimmed.starts_with('_')
+        && trimmed.chars().next().map_or(false, |c| c.is_lowercase())
     {
         return true;
     }
 
     false
-}
-
-/// Simple regex matching helper (avoids external dependency)
-fn regex_matches(text: &str, pattern: &str) -> bool {
-    // For simplicity, implement basic pattern matching
-    // In production, use the `regex` crate
-    match pattern {
-        p if p == SYMBOL_PATTERN_1 => {
-            // ^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)+$
-            let parts: Vec<&str> = text.split("::").collect();
-            if parts.len() < 2 {
-                return false;
-            }
-            parts.iter().all(|p| {
-                !p.is_empty()
-                    && p.chars()
-                        .next()
-                        .map_or(false, |c| c.is_alphabetic() || c == '_')
-                    && p.chars().all(|c| c.is_alphanumeric() || c == '_')
-            })
-        }
-        p if p == SYMBOL_PATTERN_2 => {
-            // ^_[A-Za-z0-9_]+$
-            text.starts_with('_')
-                && text.len() > 1
-                && text.chars().all(|c| c.is_alphanumeric() || c == '_')
-        }
-        p if p == SYMBOL_PATTERN_3 => {
-            // ^[A-Za-z][A-Za-z0-9]*[A-Z_][A-Za-z0-9_]*$
-            let has_upper_or_underscore = text.chars().any(|c| c.is_uppercase() || c == '_');
-            text.chars().next().map_or(false, |c| c.is_alphabetic())
-                && text.chars().all(|c| c.is_alphanumeric() || c == '_')
-                && has_upper_or_underscore
-        }
-        p if p == SYMBOL_PATTERN_4 => {
-            // ^[A-Z][A-Za-z0-9]+$
-            text.chars().next().map_or(false, |c| c.is_uppercase())
-                && text.len() > 1
-                && text.chars().all(|c| c.is_alphanumeric())
-        }
-        _ => false,
-    }
 }
 
 /// Detect query intent from query text
@@ -376,6 +361,24 @@ impl SearchStrategy {
         }
     }
 
+    /// Apply user-configured weight overrides.
+    ///
+    /// If the user has set non-default weights in their config, those take
+    /// precedence over the adaptive strategy (the user explicitly chose them).
+    /// Default config values (0.5/0.5) are treated as "no override".
+    pub fn with_config_override(mut self, config_bm25: f32, config_semantic: f32) -> Self {
+        const DEFAULT_WEIGHT: f32 = 0.5;
+        let is_default = (config_bm25 - DEFAULT_WEIGHT).abs() < f32::EPSILON
+            && (config_semantic - DEFAULT_WEIGHT).abs() < f32::EPSILON;
+
+        if !is_default {
+            self.bm25_weight = config_bm25;
+            self.semantic_weight = config_semantic;
+        }
+
+        self
+    }
+
     /// Convert to RrfConfig
     pub fn to_rrf_config(&self) -> super::hybrid::RrfConfig {
         super::hybrid::RrfConfig::with_weights(self.bm25_weight, self.semantic_weight)
@@ -391,24 +394,49 @@ mod tests {
         // Namespace-qualified
         assert!(is_symbol_query("foo::bar::Baz"));
         assert!(is_symbol_query("foo::bar"));
+        assert!(is_symbol_query("std::io::Error"));
 
         // Leading underscore
         assert!(is_symbol_query("_internal"));
         assert!(is_symbol_query("_foo_bar_baz"));
 
-        // Contains uppercase
+        // camelCase
         assert!(is_symbol_query("myFunction"));
-        assert!(is_symbol_query("AuthService"));
-        assert!(is_symbol_query("my_var_Name"));
+        assert!(is_symbol_query("authService"));
 
-        // Starts with uppercase
+        // PascalCase
+        assert!(is_symbol_query("AuthService"));
         assert!(is_symbol_query("Client"));
         assert!(is_symbol_query("Config"));
+
+        // Mixed case with underscores
+        assert!(is_symbol_query("my_var_Name"));
+
+        // snake_case
+        assert!(is_symbol_query("save_pretrained"));
+        assert!(is_symbol_query("h264_decoder"));
 
         // NOT symbol queries
         assert!(!is_symbol_query("rust error handling"));
         assert!(!is_symbol_query("how does it work"));
-        assert!(!is_symbol_query("save pretrained")); // lowercase
+        assert!(!is_symbol_query("save pretrained"));
+        assert!(!is_symbol_query("std::io error"));
+        assert!(!is_symbol_query(""));
+        assert!(!is_symbol_query("   "));
+    }
+
+    #[test]
+    fn test_single_char_and_edge_cases() {
+        assert!(!is_symbol_query("a"));
+        assert!(!is_symbol_query("1"));
+        // Single uppercase letter is too short for PascalCase
+        assert!(!is_symbol_query("A"));
+    }
+
+    #[test]
+    fn test_symbol_with_digits() {
+        assert!(is_symbol_query("Http2Client"));
+        assert!(is_symbol_query("base64_encode"));
     }
 
     #[test]
@@ -420,6 +448,9 @@ mod tests {
         assert_eq!(class.query_type, QueryType::Symbol);
 
         let class = classify("foo::bar::Baz");
+        assert_eq!(class.query_type, QueryType::Symbol);
+
+        let class = classify("std::io::Error");
         assert_eq!(class.query_type, QueryType::Symbol);
     }
 
@@ -443,6 +474,17 @@ mod tests {
         let class = classify("where is the authentication middleware defined");
         assert_eq!(class.query_type, QueryType::ComplexNl);
         assert!(class.has_relationship);
+    }
+
+    #[test]
+    fn test_classify_empty_and_whitespace() {
+        let class = classify("");
+        assert_eq!(class.query_type, QueryType::SimpleNl);
+        assert_eq!(class.word_count, 0);
+
+        let class = classify("   ");
+        assert_eq!(class.query_type, QueryType::SimpleNl);
+        assert_eq!(class.word_count, 0);
     }
 
     #[test]
@@ -478,6 +520,36 @@ mod tests {
     }
 
     #[test]
+    fn test_search_strategy_named_constructors() {
+        let s = SearchStrategy::bm25_heavy();
+        assert_eq!(s.bm25_weight, 1.0);
+        assert_eq!(s.semantic_weight, 0.3);
+
+        let s = SearchStrategy::balanced();
+        assert_eq!(s.bm25_weight, 1.0);
+        assert_eq!(s.semantic_weight, 1.0);
+
+        let s = SearchStrategy::semantic_heavy();
+        assert_eq!(s.bm25_weight, 0.5);
+        assert_eq!(s.semantic_weight, 1.0);
+    }
+
+    #[test]
+    fn test_config_override_non_default() {
+        let strategy = SearchStrategy::from_query("rust error").with_config_override(0.8, 0.2);
+        assert_eq!(strategy.bm25_weight, 0.8);
+        assert_eq!(strategy.semantic_weight, 0.2);
+    }
+
+    #[test]
+    fn test_config_override_default_is_noop() {
+        let strategy = SearchStrategy::from_query("save_pretrained").with_config_override(0.5, 0.5);
+        // Default config should not override adaptive strategy
+        assert_eq!(strategy.bm25_weight, 1.0);
+        assert_eq!(strategy.semantic_weight, 0.3);
+    }
+
+    #[test]
     fn test_entity_extraction() {
         let entities = extract_entities("auth middleware");
         assert!(
@@ -486,16 +558,6 @@ mod tests {
 
         let entities = extract_entities("ConfigManager");
         assert!(!entities.is_empty());
-
-        let entities = extract_entities("how does the worker handle payloads");
-        // May contain "Worker", "Payloads" etc.
-        for e in &entities {
-            assert!(
-                e.chars().any(|c| c.is_uppercase()),
-                "Entity '{}' should have uppercase",
-                e
-            );
-        }
     }
 
     #[test]

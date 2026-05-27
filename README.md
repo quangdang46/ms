@@ -15,10 +15,16 @@
 <div align="center">
 <h3>Quick Install</h3>
 
-**Via installer (Linux/macOS):**
+**Linux / macOS / Git Bash / WSL:**
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/quangdang46/ms/main/install.sh?$(date +%s)" | bash
+curl -fsSL "https://raw.githubusercontent.com/quangdang46/ms/main/install.sh" | bash
+```
+
+**Windows (PowerShell 5+):**
+
+```powershell
+irm https://raw.githubusercontent.com/quangdang46/ms/main/install.ps1 | iex
 ```
 
 The installer downloads the prebuilt `unknown-linux-gnu` artifact by default and

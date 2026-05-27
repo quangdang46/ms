@@ -60,11 +60,11 @@ function Write-LogInfo($Message) {
 }
 function Write-LogWarn($Message) {
     $Color = Get-CdpColor "Yellow"
-    Write-Host "${Color}[ms] WARN: $Message$(Get-CdpColor NC)" >&2
+    [Console]::Error.WriteLine("${Color}[ms] WARN: $Message$(Get-CdpColor NC)")
 }
 function Write-LogError($Message) {
     $Color = Get-CdpColor "Red"
-    Write-Host "${Color}[ms] ERROR: $Message$(Get-CdpColor NC)" >&2
+    [Console]::Error.WriteLine("${Color}[ms] ERROR: $Message$(Get-CdpColor NC)")
 }
 function Write-Die($Message) {
     Write-LogError $Message

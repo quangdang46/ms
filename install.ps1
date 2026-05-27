@@ -5,31 +5,32 @@
     Downloads and installs the prebuilt ms binary for Windows (x86_64-pc-windows-msvc.zip
     from the GitHub Releases page), verifies its SHA256 checksum, then installs it to
     $Destination (default: $HOME/.local/bin). Falls back to building from source if the
-    download fails or the binary fails to run due to GLIBC mismatch on older Linux systems
-    (the Windows build does not have this issue, so fallback is only provided for completeness).
+    download fails.
 
     Usage (PowerShell):
         irm https://raw.githubusercontent.com/quangdang46/ms/main/install.ps1 | iex
 
-    Options (passed as environment variables or parameters):
-        $Destination  Installation directory (default: "$HOME/.local.bin")
-        $Version      Version to install (default: "latest")
-        $Verify       Skip checksum verification (default: "true")
-        $EasyMode     Auto-add install directory to PATH in PowerShell profile (default: "false")
-        $FromSource   Build from source via cargo (default: "false")
-        $Uninstall    Remove installed binary (default: "false")
-        $Quiet        Suppress non-error output (default: "false")
+    Options:
+        -Destination  Installation directory (default: "$HOME\.local\bin")
+        -Version      Version to install (default: "latest")
+        -Verify       Skip checksum verification (default: $true)
+        -EasyMode     Auto-add install directory to PATH in PowerShell profile (default: $false)
+        -FromSource   Build from source via cargo (default: $false)
+        -Uninstall    Remove installed binary (default: $false)
 
-    Example (PowerShell 7+):
-        $Version = "v0.1.0"; irm https://raw.githubusercontent.com/quangdang46/ms/main/install.ps1 | iex
+    Examples:
+        .\install.ps1                           # install latest
+        .\install.ps1 -Version "v0.1.1"         # specific version
+        .\install.ps1 -EasyMode                  # auto-configure PATH
+        .\install.ps1 -Uninstall                 # remove binary
 #>
 param(
     [string]$Destination = "$HOME\.local\bin",
     [string]$Version      = "latest",
-    [bool]   $Verify       = $true,
-    [bool]   $EasyMode     = $false,
-    [bool]   $FromSource   = $false,
-    [bool]   $Uninstall    = $false
+    [switch] $Verify       = $true,
+    [switch] $EasyMode     = $false,
+    [switch] $FromSource   = $false,
+    [switch] $Uninstall    = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -55,16 +56,16 @@ function Get-CdpColor($Color) {
 function Write-LogInfo($Message) {
     if (-not $Quiet) {
         $Color = Get-CdpColor "Blue"
-        Write-Host "${Color}[ms]$(Get-CdpColor NC) $Message"
+        Write-Host "$Color[ms]$(Get-CdpColor NC) $Message"
     }
 }
 function Write-LogWarn($Message) {
     $Color = Get-CdpColor "Yellow"
-    [Console]::Error.WriteLine("${Color}[ms] WARN: $Message$(Get-CdpColor NC)")
+    [Console]::Error.WriteLine("$Color[ms] WARN: $Message$(Get-CdpColor NC)")
 }
 function Write-LogError($Message) {
     $Color = Get-CdpColor "Red"
-    [Console]::Error.WriteLine("${Color}[ms] ERROR: $Message$(Get-CdpColor NC)")
+    [Console]::Error.WriteLine("$Color[ms] ERROR: $Message$(Get-CdpColor NC)")
 }
 function Write-Die($Message) {
     Write-LogError $Message
@@ -72,7 +73,7 @@ function Write-Die($Message) {
 }
 
 $TempDir = $null
-function script:Clear-Temp {
+function Clear-Temp {
     if ($null -ne $TempDir -and (Test-Path $TempDir)) {
         Remove-Item $TempDir -Recurse -Force -EA SilentlyContinue
     }
@@ -87,7 +88,7 @@ if ($Uninstall) {
         Remove-Item $Target -Force
         Write-LogInfo "Uninstalled $Target"
     } else {
-        Write-LogInfo "Not found at $Target — nothing to uninstall"
+        Write-LogInfo "Not found at $Target -- nothing to uninstall"
     }
     return
 }
@@ -102,10 +103,15 @@ function Get-Platform {
     return "${Arch}-pc-windows-msvc"
 }
 
+# Pre-compiled regex patterns to avoid []-interpretation issues in PowerShell
+$VERSION_PATTERN = "^[vV]?\d+\.\d+\.\d+(-[\w.]+)?$"
+$CHECKSUM_LINE_PATTERN = "^\s*([a-fA-F0-9]+)\s+"
+$VERSION_URL_PATTERN = "tag/([^/]+)$"
+
 # === Version resolution ===
 function Resolve-Version {
     if ($Version -ne "latest") {
-        if ($Version -notmatch "^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$") {
+        if ($Version -notmatch $VERSION_PATTERN) {
             Write-Die "Invalid version format: $Version (expected vX.Y.Z or X.Y.Z)"
         }
         if ($Version -notmatch "^v") { $Version = "v$Version" }
@@ -116,7 +122,7 @@ function Resolve-Version {
     try {
         $EffectiveUrl = (Invoke-WebRequest -Uri "https://github.com/${REPO}/releases/latest" `
             -MaximumRedirection 0 -ErrorAction SilentlyContinue).Headers.Location
-        if ($EffectiveUrl -match 'tag/([^/]+)$') {
+        if ($EffectiveUrl -match $VERSION_URL_PATTERN) {
             return $matches[1]
         }
     } catch {}
@@ -162,7 +168,7 @@ function Install-MsArtifact($ArchiveUrl, $ArchivePath, $VersionForUrl, $Platform
 
         $ExpectedSha = $null
         Get-Content $ChecksumsPath | ForEach-Object {
-            if ($_ -match "^\s*([a-fA-F0-9]+)\s+.*$([Regex]::Escape($ArchiveName))$") {
+            if ($_ -match "${CHECKSUM_LINE_PATTERN}$([Regex]::Escape($ArchiveName))$") {
                 $ExpectedSha = $matches[1]
             }
         }
@@ -176,7 +182,6 @@ function Install-MsArtifact($ArchiveUrl, $ArchivePath, $VersionForUrl, $Platform
     }
 
     Write-LogInfo "Extracting..."
-    $ExtractDest = Join-Path $ExtractDir $BINARY_NAME
     if (Test-Path $ExtractDir) { Remove-Item $ExtractDir -Recurse -Force }
     New-Item $ExtractDir -ItemType Directory -Force | Out-Null
     Expand-ArchiveProper $ArchivePath $ExtractDir
@@ -185,7 +190,10 @@ function Install-MsArtifact($ArchiveUrl, $ArchivePath, $VersionForUrl, $Platform
     if (-not $BinaryPath) { Write-Die "Could not find $BINARY_NAME in archive" }
     $BinaryPath = Join-Path $ExtractDir $BinaryPath
 
-    $InstallDestDir = if (Test-Path $Destination) { $Destination } else { New-Item $Destination -ItemType Directory -Force | Resolve-Path }
+    if (-not (Test-Path $Destination)) {
+        New-Item $Destination -ItemType Directory -Force | Out-Null
+    }
+    $InstallDestDir = Get-Item $Destination
     $TargetPath = Join-Path $InstallDestDir.FullName $BINARY_NAME
 
     # Atomic: write to temp then move
@@ -197,10 +205,10 @@ function Install-MsArtifact($ArchiveUrl, $ArchivePath, $VersionForUrl, $Platform
 }
 
 function Add-ToPath($Path) {
-    $UserProfilePath = if ($IsLinux -or $IsMacOS) { $HOME } else { "$env:USERPROFILE" }
-    $RcFile = Join-Path $UserProfilePath "Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
-    if (-not (Test-Path (Split-Path $RcFile))) {
-        New-Item -Path (Split-Path $RcFile) -ItemType Directory -Force | Out-Null
+    $RcFile = Join-Path $env:USERPROFILE "Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
+    $RcDir = Split-Path $RcFile
+    if (-not (Test-Path $RcDir)) {
+        New-Item -Path $RcDir -ItemType Directory -Force | Out-Null
     }
 
     if ((Test-Path $RcFile) -and (Get-Content $RcFile -Raw) -match [Regex]::Escape($Path)) {
@@ -210,7 +218,7 @@ function Add-ToPath($Path) {
     if ($EasyMode) {
         $PathLine = "`$env:PATH = `"`$env:PATH;$Path`"  # ms installer"
         $PathLine | Out-File $RcFile -Append -Encoding utf8
-        Write-LogWarn "PATH updated — restart PowerShell or reload profile to use ms"
+        Write-LogWarn "PATH updated -- restart PowerShell or reload profile to use ms"
     } else {
         Write-LogWarn "Add to PATH: `$env:PATH += `";$Path`""
     }
@@ -224,7 +232,7 @@ function Build-FromSource {
     Write-LogInfo "Building from source..."
     $CloneDir = Join-Path $TempDir "ms-src"
     if (Test-Path $CloneDir) { Remove-Item $CloneDir -Recurse -Force }
-    git clone --depth 1 "https://github.com/$REPO" . $CloneDir | Out-Null
+    git clone --depth 1 "https://github.com/$REPO" $CloneDir | Out-Null
     Push-Location $CloneDir
     try {
         $Env:CARGO_TARGET_DIR = Join-Path $TempDir "target"
@@ -232,7 +240,7 @@ function Build-FromSource {
         $Env:CARGO_TARGET_DIR = $null
         $BuiltBin = Join-Path $CloneDir "target\release\$BINARY_NAME.exe"
         if (-not (Test-Path $BuiltBin)) { Write-Die "Source build failed" }
-        $TargetPath = Join-Path (Split-Path $Destination -Parent) "$Destination\$BINARY_NAME.exe"
+        $TargetPath = Join-Path $Destination $BINARY_NAME
         Copy-Item $BuiltBin $TargetPath -Force
         Write-LogInfo "Installed from source to $TargetPath"
     } finally {
@@ -264,7 +272,7 @@ if (-not $FromSource) {
                 Write-LogWarn "Download failed (attempt $Attempt/$MAX_RETRIES), retrying..."
                 Start-Sleep 3
             } else {
-                Write-LogWarn "Download failed — building from source..."
+                Write-LogWarn "Download failed -- building from source..."
                 Build-FromSource
                 Add-ToPath $Destination
                 Write-LogInfo "Run 'ms --version' to verify."
@@ -283,12 +291,11 @@ Add-ToPath $Destination
 # === Verify ===
 if (Test-Path (Join-Path $Destination $BINARY_NAME)) {
     Write-LogInfo ""
-    Write-Host "  $(Get-CdpColor Green)SUCCESS$(Get-CdpColor NC) — ms $Version installed to $Destination"
+    Write-Host "  $(Get-CdpColor Green)SUCCESS$(Get-CdpColor NC) -- ms $Version installed to $Destination"
     Write-Host ""
     Write-Host "  Run 'ms --help' to get started."
     Write-Host ""
 } else {
-    Write-LogWarn "Binary installed but --version check failed. This sometimes happens on"
-    Write-LogWarn "older Linux distributions with glibc version mismatches."
-    Write-LogWarn "Try re-running with `$FromSource = `$true"
+    Write-LogWarn "Binary installed but --version check failed."
+    Write-LogWarn "Try re-running with -FromSource"
 }

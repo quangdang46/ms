@@ -286,7 +286,7 @@ impl ContextCollector {
             revwalk.push_head().ok()?;
             for oid in revwalk.take(5).flatten() {
                 if let Ok(commit) = repo.find_commit(oid) {
-                    if let Some(summary) = commit.summary() {
+                    if let Ok(Some(summary)) = commit.summary() {
                         recent_commits.push(summary.to_string());
                     }
                 }

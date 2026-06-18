@@ -1314,7 +1314,7 @@ fn push_git_repo(
 fn ensure_origin_url(repo: &Repository, url: &str) -> Result<()> {
     match repo.find_remote("origin") {
         Ok(remote) => {
-            if remote.url() != Some(url) {
+            if remote.url().ok() != Some(url) {
                 repo.remote_set_url("origin", url).map_err(MsError::Git)?;
             }
         }

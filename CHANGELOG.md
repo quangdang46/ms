@@ -9,6 +9,35 @@ All notable changes to **ms** (Meta Skill CLI) are documented here.
 
 ---
 
+## [Unreleased] -- ultracode sync
+
+Fork sync with upstream `Dickleworthstone/meta_skill` (2026-06-18). Landed: [`6181f38`](https://github.com/quangdang46/ms/commit/6181f38a516b8b80af4099c2e544c729c317cf84).
+
+### Upstream Cherry-pick
+
+- **cass 0.6.x inline marker reconstruction** -- cherry-picked from upstream [`096f071`](https://github.com/Dickleworthstone/meta_skill/commit/096f071) / PR #114. `src/cass/client.rs` now reassembles tool calls from the inline marker format used by cass 0.6.x releases so `ms build --from-cass` keeps mining patterns from current cass output ([`6181f38`](https://github.com/quangdang46/ms/commit/6181f38a516b8b80af4099c2e544c729c317cf84))
+
+### Dependency Bumps
+
+- **MSRV raised to 1.89** -- `Cargo.toml` `rust-version` updated from 1.85 to 1.89 to match the toolchain required by current transitive dependencies (e.g. updated `clap` / `syn` versions from `cargo update`)
+- **cargo update** -- `Cargo.lock` refreshed across the tree (e.g. `anstyle-parse` 2.2.1 -> 2.2.2, `anstyle-query` 1.5.0 -> 1.5.1, `syn` 2.0.117 -> 2.0.118, plus new `approx` 0.5.1 dep). No direct `Cargo.toml` dependency version changes
+
+### CI / Infrastructure
+
+- **GitHub Actions sync** -- workflow action versions aligned with upstream (e.g. `upload-artifact`, `download-artifact`, `checkout`, `attest-build-provenance`, `sticky-pull-request-comment`, `repository-dispatch`)
+
+### Code Hygiene
+
+- **cargo fmt + cargo clippy** -- formatting and lint cleanups applied after dependency updates
+- **MSRV check** -- verified the project still builds clean on the declared minimum supported Rust version
+
+### Deliberately Excluded from this Sync
+
+- **rusqlite -> frankensqlite migration** (upstream #106) -- the fsqlite refactor is incompatible with the current state of the fork and was skipped
+- **FTS5 escape fix** (upstream #100) -- the fork already ships a superior term-based FTS5 query builder ([`7cdc8f2`](https://github.com/quangdang46/ms/commit/7cdc8f2), [`0799064`](https://github.com/quangdang46/ms/commit/0799064)) that subsumes the upstream fix
+
+---
+
 ## [Unreleased] -- HEAD
 
 Tracking period: 2026-01-23 through 2026-03-21 (latest: [`bab33b7`](https://github.com/quangdang46/ms/commit/bab33b73a7695f1f153a42e05183fbcf07625eab)).

@@ -22,6 +22,9 @@ use crate::suggestions::tracking::SuggestionTracker;
 
 #[derive(Args, Debug)]
 pub struct SuggestArgs {
+    /// Task description to route (when provided, behaves like `ms route`)
+    pub task: Option<String>,
+
     /// Maximum number of suggestions to return
     #[arg(long, short, default_value = "5")]
     pub limit: usize,
@@ -105,6 +108,21 @@ pub struct ScoreBreakdown {
 
 pub fn run(ctx: &AppContext, args: &SuggestArgs) -> Result<()> {
     debug!(target: "suggest", mode = ?ctx.output_format, "output mode selected");
+
+    // 0. If a task description is provided, delegate to the route engine.
+    //    `ms suggest <task>` is a convenience alias for `ms route <task>` —
+    //    same engine, same output, same load commands.
+    if let Some(task) = args.task.as_deref() {
+        let route_args = super::route::RouteArgs {
+            task: task.to_string(),
+            top_n: args.limit,
+            threshold: 0.65,
+            debug: false,
+            cwd: args.cwd.clone(),
+            output: None,
+        };
+        return super::route::run(ctx, &route_args);
+    }
 
     // 1. Capture working context
     let cwd_path: Option<PathBuf> = args.cwd.as_ref().map(PathBuf::from);

@@ -80,6 +80,27 @@ Skills can come from anywhere: hand-written `SKILL.md` files, mined from CASS se
 
 ---
 
+## Why ms Exists
+
+The motivation for `ms` came from a Codex CLI message that crystallized a fundamental limitation of agent skill systems:
+
+> Skill descriptions were shortened to fit the 2% skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest.
+
+The 2% context budget means that even if you have 270 well-written skills with rich descriptions, the agent sees only truncated versions of them. The user is told to **disable skills** to make room — but disabling the wrong skill means the agent loses capability exactly when it needs it most.
+
+**`ms` solves this differently**:
+
+- **Index everything** — keep all 270 skills in local SQLite with full descriptions intact, no truncation, nothing disabled
+- **Route on demand** — when the agent needs help, `ms route "task description"` returns the **3 most relevant skills** with their full descriptions and a ready-to-use `ms load` command
+- **Pay only for what you use** — the agent's context sees ~3 skill descriptions per task, not 270
+- **No more "disable skills"** — nothing is hidden, nothing is truncated, the right skills are surfaced at the right time
+
+The result: a 270-skill library behaves like a 3-skill library at query time, but you never have to choose which 3 to keep. Every skill stays available; only the relevant ones reach the context window.
+
+This is also why `ms` ships an MCP server: agents can call `ms_route` / `ms_suggest` as native tools and get exactly the skills they need, with full descriptions, on every turn.
+
+---
+
 ## Quick Example
 
 ```bash

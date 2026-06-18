@@ -167,8 +167,9 @@ fn init_human(target: &Path, args: &InitArgs) -> Result<()> {
         );
         if result.collision_report.has_collisions {
             println!(
-                "{}: {} skill ID collision(s) detected",
-                "WARNING".yellow(),
+                "{} {} skill(s) from different providers share the same name — \
+                 using provider prefix to keep them distinct (e.g. agents/dcg vs claude/dcg)",
+                "NOTE:".green(),
                 result.collision_report.len()
             );
         }

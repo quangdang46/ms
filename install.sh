@@ -1,21 +1,33 @@
 #!/bin/bash
 # ms installer - https://github.com/quangdang46/ms
-# Usage: curl -sSL https://raw.githubusercontent.com/quangdang46/ms/main/install.sh | bash
 #
 # Options:
 #   --install-dir DIR  Install directory (default: ~/.local/bin)
 #   --version VER      Version to install (default: latest)
 #   --no-verify        Skip checksum verification
+#   --no-mcp           Skip MCP provider auto-configuration
+#   --system           Install to /usr/local/bin
+#   --dry-run          Preview without changes
+#   --check            Verify existing installation
 #   --easy-mode        Non-interactive, auto-configure PATH
+  --system           Install to /usr/local/bin
+  --dry-run          Preview without changes
+  --check            Verify existing installation
 #   --help             Show this help message
 #
 # Environment variables:
 #   INSTALL_DIR        Override install directory
 #   VERSION            Override version to install
 #   VERIFY             Set to "false" to skip checksum verification
+#   NO_MCP             Set to "true" to skip MCP auto-configuration
 #   NO_COLOR           Disable colored output
+#   DRY_RUN            Set to "true" for dry run
+#   CHECK              Set to "true" for verification check
 
 set -euo pipefail
+umask 022
+DRY_RUN=0
+CHECK=0
 
 # Configuration
 REPO="quangdang46/ms"
@@ -50,12 +62,17 @@ Options:
   --version VER      Version to install (default: latest)
   --no-verify        Skip checksum verification
   --easy-mode        Non-interactive, auto-configure PATH
+  --system           Install to /usr/local/bin
+  --dry-run          Preview without changes
+  --check            Verify existing installation
+  --no-mcp           Skip MCP provider auto-configuration
   --help             Show this help message
 
 Environment variables:
   INSTALL_DIR        Override install directory
   VERSION            Override version to install
   VERIFY             Set to "false" to skip checksum verification
+  NO_MCP             Set to "true" to skip MCP auto-configuration
   NO_COLOR           Disable colored output
 
 Examples:
@@ -152,6 +169,7 @@ require_option_value() {
         die "$option requires a value"
     fi
 }
+
 
 fetch_latest_version_from_redirect() {
     local effective_url version
@@ -310,6 +328,7 @@ parse_args() {
     INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
     VERSION="${VERSION:-latest}"
     VERIFY="${VERIFY:-true}"
+    NO_MCP="${NO_MCP:-0}"
     EASY_MODE=0
 
     while [[ $# -gt 0 ]]; do
@@ -332,6 +351,22 @@ parse_args() {
                 EASY_MODE=1
                 shift
                 ;;
+            --no-mcp)
+                NO_MCP=1
+                shift
+                ;;
+            --system)
+                INSTALL_DIR="/usr/local/bin"
+                shift
+                ;;
+            --dry-run)
+                DRY_RUN=1
+                shift
+                ;;
+            --check)
+                CHECK=1
+                shift
+                ;;
             --help|-h)
                 usage
                 exit 0
@@ -347,11 +382,36 @@ parse_args() {
 main() {
     parse_args "$@"
 
+    # --dry-run: preview without changes
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "Dry run: would install ms to $INSTALL_DIR"
+        log "Version: $VERSION | Platform: $(detect_platform)"
+        exit 0
+    fi
+
+    # --check: verify existing installation
+    if [[ $CHECK -eq 1 ]]; then
+        if command -v ms &>/dev/null; then
+            log "ms is installed: $(ms --version 2>/dev/null || echo unknown)"
+        else
+            warn "ms is not installed or not in PATH"
+        fi
+        exit 0
+    fi
+
+
     log "${BOLD}Installing ms...${NC}"
 
     # Detect platform
     local platform
     platform=$(detect_platform)
+
+    # Determine archive extension based on platform
+    local archive_ext="tar.gz"
+    if [[ "$platform" == *pc-windows-msvc ]]; then
+        archive_ext="zip"
+    fi
+
     log "Detected platform: ${GREEN}$platform${NC}"
 
     # Get version
@@ -371,7 +431,7 @@ main() {
     # Adjust version for URL (strip 'v' prefix if present)
     local version_for_url="${VERSION#v}"
     local base_url="https://github.com/${REPO}/releases/download/${VERSION}"
-    local archive_name="ms-${version_for_url}-${platform}.tar.gz"
+    local archive_name="ms-${version_for_url}-${platform}.${archive_ext}"
     local archive_url="${base_url}/${archive_name}"
     local checksums_url="${base_url}/SHA256SUMS.txt"
 
@@ -395,13 +455,20 @@ main() {
         fi
 
         log "Extracting..."
-        local extract_dir="${temp_dir}/extract-${archive_name%.tar.gz}"
+        local extract_dir="${temp_dir}/extract-${archive_name%.*}"
         rm -rf "$extract_dir"
         mkdir -p "$extract_dir"
-        tar -xzf "${temp_dir}/${archive_name}" -C "$extract_dir" || {
-            err "Failed to extract archive"
-            return 1
-        }
+        if [[ "$archive_ext" == "zip" ]]; then
+            unzip -q "${temp_dir}/${archive_name}" -d "$extract_dir" || {
+                err "Failed to extract archive"
+                return 1
+            }
+        else
+            tar -xzf "${temp_dir}/${archive_name}" -C "$extract_dir" || {
+                err "Failed to extract archive"
+                return 1
+            }
+        fi
 
         local binary_path
         binary_path=$(find "$extract_dir" -name "$BINARY_NAME" -type f -executable 2>/dev/null | head -1)
@@ -434,7 +501,7 @@ main() {
     if [[ $primary_failed -eq 1 ]] && [[ "$primary_platform" == *unknown-linux-gnu ]]; then
         warn "gnu artifact unavailable; trying statically-linked musl build..."
         platform="${primary_platform%-unknown-linux-gnu}-unknown-linux-musl"
-        archive_name="ms-${version_for_url}-${platform}.tar.gz"
+            archive_name="ms-${version_for_url}-${platform}.${archive_ext}"
         archive_url="${base_url}/${archive_name}"
         if download "$archive_url" "${temp_dir}/${archive_name}"; then
             primary_failed=0
@@ -469,7 +536,7 @@ main() {
                 warn "  (host reported: ${verify_stderr%%$'\n'*})"
             fi
             platform="${primary_platform%-unknown-linux-gnu}-unknown-linux-musl"
-            archive_name="ms-${version_for_url}-${platform}.tar.gz"
+            archive_name="ms-${version_for_url}-${platform}.${archive_ext}"
             archive_url="${base_url}/${archive_name}"
             if download "$archive_url" "${temp_dir}/${archive_name}"; then
                 if install_artifact "$archive_name" "$archive_url"; then
@@ -524,6 +591,11 @@ main() {
     if "${INSTALL_DIR}/${BINARY_NAME}" --version 2>/dev/null; then
         echo ""
         log "${GREEN}Installation complete! Run 'ms --help' to get started.${NC}"
+
+        # Auto-configure MCP providers for AI coding agents
+        if [ "$NO_MCP" -eq 0 ] && (command -v jq >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1 || command -v node >/dev/null 2>&1); then
+            configure_mcp_providers "${INSTALL_DIR}/${BINARY_NAME}"
+        fi
     else
         warn "Binary installed but failed to run."
         warn "This is often caused by a GLIBC version mismatch on older Linux"
@@ -540,11 +612,186 @@ main() {
     fi
 }
 
-if [[ "${1:-}" == "--source-only" ]]; then
-    if (return 0 2>/dev/null); then
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MCP Provider Auto-Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+# Auto-registers ms as an MCP server in every installed AI coding tool.
+#
+# Supports 10 providers: Claude Code, Cursor, Cline, Windsurf, VS Code Copilot,
+# OpenCode, Codex CLI, Gemini CLI, Amazon Q, Warp.
+
+# JSON merge helper (works with jq, node, or python3)
+_json_merge() {
+    local file="$1" key="$2" value="$3"
+    if [ ! -f "$file" ]; then
+        mkdir -p "$(dirname "$file")"
+        echo "{\"${key}\": ${value}}" > "$file"
         return 0
     fi
-    exit 0
-fi
+    if command -v jq &>/dev/null; then
+        local tmpf; tmpf="$(mktemp)"
+        jq --argjson val "$value" ".$key += $val // .${key} = $val" "$file" > "$tmpf" && mv "$tmpf" "$file"
+    elif command -v node &>/dev/null; then
+        node -e "
+            const fs=require("fs"),f="${file}";
+            const d=JSON.parse(fs.readFileSync(f,"utf8")||"{}");
+            d["${key}"]=Object.assign(d["${key}"]||{},${value});
+            fs.writeFileSync(f,JSON.stringify(d,null,2)+"\n");
+        "
+    elif command -v python3 &>/dev/null; then
+        python3 -c "
+import json,os; f="${file}"; k="${key}"; v=${value}
+d=json.load(open(f)) if os.path.exists(f) and os.path.getsize(f)>0 else {}
+d.setdefault(k,{}).update(v)
+json.dump(d,open(f,"w"),indent=2); print()
+"
+    else
+        warn "No JSON tool (jq/node/python3) -- skipping MCP config for $file"; return 1
+    fi
+}
 
-main "$@"
+
+# TOML upsert for Codex CLI
+_toml_upsert_mcp() {
+    local file="$1" server_name="$2" command_path="$3"
+    mkdir -p "$(dirname "$file")"
+    [ -f "$file" ] || touch "$file"
+    if grep -q "^\[mcp_servers\.${server_name}\]" "$file" 2>/dev/null; then
+        local tmpf; tmpf="$(mktemp)"
+        sed "s|^\(command = \).*|\1"${command_path}"|" "$file" > "$tmpf" && mv "$tmpf" "$file"
+    else
+        cat >> "$file" << TOML_EOF
+
+[mcp_servers.${server_name}]
+type = "stdio"
+command = "${command_path}"
+args = []
+TOML_EOF
+    fi
+}
+
+
+# Register ms as MCP server for a single JSON-based provider
+_configure_mcp_provider() {
+    local provider_name="$1" settings_file="$2" json_key="$3" binary="$4"
+    [ -f "$binary" ] || return 0
+    local config_dir; config_dir="$(dirname "$settings_file")"
+    mkdir -p "$config_dir"
+    log "  Configuring MCP for ${provider_name}..."
+    local mcp_entry
+    mcp_entry=$(cat << EOF_MS_MCP
+{
+  "ms": {
+    "command": "${binary}",
+    "args": ["mcp", "serve"],
+    "env": {}
+  }
+}
+EOF_MS_MCP
+)
+    _json_merge "$settings_file" "$json_key" "$mcp_entry"
+}
+
+# Register ms MCP in OpenCode (uses env as array of KEY=VALUE strings)
+_configure_mcp_opencode() {
+    local binary="$1"
+    local settings_file="$HOME/.opencode.json"
+    [ ! -f "$settings_file" ] && [ -d "$HOME/.config/opencode" ] && settings_file="$HOME/.config/opencode/.opencode.json"
+    [ -f "$settings_file" ] || return 0
+    log "  Configuring MCP for OpenCode..."
+    local mcp_entry
+    mcp_entry=$(cat << EOF_MS_MCP
+{
+  "ms": {
+    "type": "stdio",
+    "command": "${binary}",
+    "args": ["mcp", "serve"],
+    "env": []
+  }
+}
+EOF_MS_MCP
+)
+    _json_merge "$settings_file" "mcpServers" "$mcp_entry"
+}
+
+# Register ms MCP in Codex CLI (uses TOML)
+_configure_mcp_codex() {
+    local binary="$1"
+    local config_file="$HOME/.codex/config.toml"
+    [ -d "$(dirname "$config_file")" ] || return 0
+    log "  Configuring MCP for Codex CLI..."
+    _toml_upsert_mcp "$config_file" "ms" "${binary}"
+}
+
+# Configure all MCP providers
+configure_mcp_providers() {
+    local binary="$1"
+    local mcp_binary="$binary"
+
+    log "Configuring MCP providers for AI coding agents..."
+
+    # 1. Claude Code -- ~/.claude.json (root of home, NOT ~/.claude/settings.json)
+    _configure_mcp_provider "Claude Code" "$HOME/.claude.json" "mcpServers" "$mcp_binary"
+
+    # 2. Cursor -- ~/.cursor/mcp.json
+    _configure_mcp_provider "Cursor" "$HOME/.cursor/mcp.json" "mcpServers" "$mcp_binary"
+
+    # 3. Cline -- VS Code globalStorage
+    local cline_settings
+    case "$(uname -s)" in
+        Darwin*)
+            cline_settings="$HOME/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+            ;;
+            --system)
+                INSTALL_DIR="/usr/local/bin"
+                shift
+                ;;
+            --dry-run)
+                DRY_RUN=1
+                shift
+                ;;
+            --check)
+                CHECK=1
+                shift
+                ;;
+        MINGW*|MSYS*|CYGWIN*)
+            cline_settings="${APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+            ;;
+        *)
+            cline_settings="$HOME/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+            ;;
+    esac
+    [ -d "$(dirname "$cline_settings")" ] && 
+        _configure_mcp_provider "Cline" "$cline_settings" "mcpServers" "$mcp_binary"
+
+    # 4. Windsurf -- ~/.codeium/windsurf/mcp_config.json
+    _configure_mcp_provider "Windsurf" "$HOME/.codeium/windsurf/mcp_config.json" "mcpServers" "$mcp_binary"
+
+    # 5. VS Code Copilot -- uses "servers" key (NOT "mcpServers")
+    _configure_mcp_provider "VS Code Copilot" "$HOME/.vscode/mcp.json" "servers" "$mcp_binary"
+
+    # 6. OpenCode -- special env format
+    _configure_mcp_opencode "$mcp_binary"
+
+    # 7. Codex CLI -- TOML
+    _configure_mcp_codex "$mcp_binary"
+
+    # 8. Gemini CLI -- ~/.gemini/settings.json
+    _configure_mcp_provider "Gemini CLI" "$HOME/.gemini/settings.json" "mcpServers" "$mcp_binary"
+
+    # 9. Amazon Q -- write both paths
+    _configure_mcp_provider "Amazon Q" "$HOME/.aws/amazonq/mcp.json" "mcpServers" "$mcp_binary"
+    _configure_mcp_provider "Amazon Q (IDE)" "$HOME/.aws/amazonq/default.json" "mcpServers" "$mcp_binary"
+
+    # 10. Warp -- project-scoped .warp/.mcp.json
+    if [ -d ".warp" ] || [ -f "Cargo.toml" ]; then
+        _configure_mcp_provider "Warp" ".warp/.mcp.json" "mcpServers" "$mcp_binary"
+    fi
+
+    log "MCP provider configuration complete."
+}
+
+if [[ "${BASH_SOURCE[0]:-}" == "${0:-}" ]] || [[ -z "${BASH_SOURCE[0]:-}" ]]; then
+    { main "$@"; }
+fi

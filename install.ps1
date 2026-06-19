@@ -17,6 +17,7 @@
         -EasyMode     Auto-add install directory to PATH in PowerShell profile (default: $false)
         -FromSource   Build from source via cargo (default: $false)
         -Uninstall    Remove installed binary (default: $false)
+        -NoMcp        Skip MCP provider auto-configuration (default: $false)
 
     Examples:
         .\install.ps1                           # install latest
@@ -30,7 +31,9 @@ param(
     [switch] $Verify       = $true,
     [switch] $EasyMode     = $false,
     [switch] $FromSource   = $false,
-    [switch] $Uninstall    = $false
+    [switch] $Uninstall    = $false,
+    [switch] $NoMcp        = $false,
+    [switch] $Quiet        = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -294,8 +297,164 @@ if (Test-Path (Join-Path $Destination $BINARY_NAME)) {
     Write-Host "  $(Get-CdpColor Green)SUCCESS$(Get-CdpColor NC) -- ms $Version installed to $Destination"
     Write-Host ""
     Write-Host "  Run 'ms --help' to get started."
+
+    # Auto-configure MCP providers for AI coding agents
+    if (-not $NoMcp) {
+        $MsBinary = Join-Path $Destination $BINARY_NAME
+        if (Test-Path $MsBinary) {
+            Configure-AllMcpProviders $MsBinary
+        }
+    }
     Write-Host ""
 } else {
     Write-LogWarn "Binary installed but --version check failed."
     Write-LogWarn "Try re-running with -FromSource"
+}
+
+# === MCP Provider Auto-Configuration ===
+
+<#
+.SYNOPSIS
+    Merge JSON into a file at a specified key path.
+.DESCRIPTION
+    Adds or updates a JSON value at the given top-level key in a JSON file.
+#>
+function Merge-JsonIntoFile {
+    param([string]$FilePath, [string]$Key, [hashtable]$Value)
+    $data = @{}
+    if (Test-Path $FilePath) {
+        $content = Get-Content -Path $FilePath -Raw -ErrorAction SilentlyContinue
+        if ($content) {
+            try { $data = $content | ConvertFrom-Json -AsHashtable } catch { $data = @{} }
+        }
+    }
+    if (-not $data.ContainsKey($Key)) { $data[$Key] = @{} }
+    foreach ($k in $Value.Keys) { $data[$Key][$k] = $Value[$k] }
+    $dir = Split-Path $FilePath -Parent
+    if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+    $data | ConvertTo-Json -Depth 10 | Set-Content -Path $FilePath -Encoding UTF8
+}
+
+<#
+.SYNOPSIS
+    Register ms as an MCP server for a single JSON-based provider.
+#>
+function Register-McpProvider {
+    param([string]$ProviderName, [string]$SettingsFile, [string]$JsonKey, [string]$BinaryPath)
+    if (-not (Test-Path $BinaryPath)) { return }
+    Write-LogInfo "  Configuring MCP for $ProviderName..."
+    $mcpEntry = @{
+        "ms" = @{
+            command = $BinaryPath
+            args    = @("mcp", "serve")
+            env     = @{}
+        }
+    }
+    Merge-JsonIntoFile -FilePath $SettingsFile -Key $JsonKey -Value $mcpEntry
+}
+
+<#
+.SYNOPSIS
+    Register ms MCP in Codex CLI (TOML format).
+#>
+function Register-McpCodex {
+    param([string]$BinaryPath)
+    $configFile = Join-Path $env:USERPROFILE ".codex\config.toml"
+    $configDir = Split-Path $configFile -Parent
+    if (-not (Test-Path $configDir)) { return }
+    Write-LogInfo "  Configuring MCP for Codex CLI..."
+    $content = ""
+    if (Test-Path $configFile) {
+        $content = Get-Content $configFile -Raw
+    }
+    $serverBlock = @"
+
+[mcp_servers.ms]
+type = "stdio"
+command = "$BinaryPath"
+args = ["mcp", "serve"]
+"@
+    $content += $serverBlock
+    $dir = Split-Path $configFile -Parent
+    if (-not (Test-Path $dir)) { New-Item $dir -ItemType Directory -Force | Out-Null }
+    Set-Content -Path $configFile -Value $content -Encoding UTF8
+}
+
+<#
+.SYNOPSIS
+    Register ms MCP in OpenCode (uses env as array).
+#>
+function Register-McpOpenCode {
+    param([string]$BinaryPath)
+    $settingsFile = Join-Path $env:USERPROFILE ".opencode.json"
+    if (-not (Test-Path $settingsFile)) {
+        $xdgPath = Join-Path $env:USERPROFILE ".config\opencode\.opencode.json"
+        if (Test-Path $xdgPath) { $settingsFile = $xdgPath } else { return }
+    }
+    Write-LogInfo "  Configuring MCP for OpenCode..."
+    $mcpEntry = @{
+        "ms" = @{
+            type    = "stdio"
+            command = $BinaryPath
+            args    = @("mcp", "serve")
+            env     = @()
+        }
+    }
+    Merge-JsonIntoFile -FilePath $settingsFile -Key "mcpServers" -Value $mcpEntry
+}
+
+<#
+.SYNOPSIS
+    Configure all 10 MCP providers for the ms MCP server.
+#>
+function Configure-AllMcpProviders {
+    param([string]$BinaryPath)
+
+    $mcpEntry = @{
+        "ms" = @{
+            command = $BinaryPath
+            args    = @("mcp", "serve")
+            env     = @{}
+        }
+    }
+
+    Write-LogInfo "Configuring MCP providers for AI coding agents..."
+
+    # 1. Claude Code -- ~/.claude.json (root of home)
+    Register-McpProvider -ProviderName "Claude Code" -SettingsFile (Join-Path $env:USERPROFILE ".claude.json") -JsonKey "mcpServers" -BinaryPath $BinaryPath
+
+    # 2. Cursor -- ~/.cursor/mcp.json
+    Register-McpProvider -ProviderName "Cursor" -SettingsFile (Join-Path $env:USERPROFILE ".cursor\mcp.json") -JsonKey "mcpServers" -BinaryPath $BinaryPath
+
+    # 3. Cline -- VS Code globalStorage
+    $clinePath = Join-Path $env:APPDATA "Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json"
+    if (Test-Path (Split-Path $clinePath -Parent)) {
+        Register-McpProvider -ProviderName "Cline" -SettingsFile $clinePath -JsonKey "mcpServers" -BinaryPath $BinaryPath
+    }
+
+    # 4. Windsurf -- ~/.codeium/windsurf/mcp_config.json
+    Register-McpProvider -ProviderName "Windsurf" -SettingsFile (Join-Path $env:USERPROFILE ".codeium\windsurf\mcp_config.json") -JsonKey "mcpServers" -BinaryPath $BinaryPath
+
+    # 5. VS Code Copilot -- uses "servers" key
+    Register-McpProvider -ProviderName "VS Code Copilot" -SettingsFile (Join-Path $env:USERPROFILE ".vscode\mcp.json") -JsonKey "servers" -BinaryPath $BinaryPath
+
+    # 6. OpenCode -- special env format
+    Register-McpOpenCode -BinaryPath $BinaryPath
+
+    # 7. Codex CLI -- TOML
+    Register-McpCodex -BinaryPath $BinaryPath
+
+    # 8. Gemini CLI -- ~/.gemini/settings.json
+    Register-McpProvider -ProviderName "Gemini CLI" -SettingsFile (Join-Path $env:USERPROFILE ".gemini\settings.json") -JsonKey "mcpServers" -BinaryPath $BinaryPath
+
+    # 9. Amazon Q -- write both paths
+    Register-McpProvider -ProviderName "Amazon Q" -SettingsFile (Join-Path $env:USERPROFILE ".aws\amazonq\mcp.json") -JsonKey "mcpServers" -BinaryPath $BinaryPath
+    Register-McpProvider -ProviderName "Amazon Q (IDE)" -SettingsFile (Join-Path $env:USERPROFILE ".aws\amazonq\default.json") -JsonKey "mcpServers" -BinaryPath $BinaryPath
+
+    # 10. Warp -- project-scoped .warp/.mcp.json
+    if (Test-Path ".warp" -PathType Container -or (Test-Path "Cargo.toml")) {
+        Register-McpProvider -ProviderName "Warp" -SettingsFile ".warp\.mcp.json" -JsonKey "mcpServers" -BinaryPath $BinaryPath
+    }
+
+    Write-LogInfo "MCP provider configuration complete."
 }

@@ -233,7 +233,7 @@ function Register-McpProvider {
         Merge-Json -FilePath $ConfigPath -Key $JsonKey -Value $mcpEntry
         Write-Success "Registered $McpName with $ProviderName"
     } catch {
-        Write-Warn "Could not register with $ProviderName (config: $ConfigPath): $_"
+        Write-Warn "Could not register with $ProviderName (config: $ConfigPath): $($_)"
     }
 }
 
@@ -253,7 +253,7 @@ function Unregister-McpProvider {
             Write-Success "Unregistered $McpName from $ProviderName"
         }
     } catch {
-        Write-Warn "Could not unregister from $ProviderName: $_"
+        Write-Warn "Could not unregister from $ProviderName: $($_)"
     }
 }
 
@@ -283,7 +283,7 @@ args = ["mcp", "serve"]
         Add-Content -Path $configPath -Value $serverBlock -Encoding UTF8
         Write-Success "Registered $McpName with Codex CLI"
     } catch {
-        Write-Warn "Could not register with Codex CLI: $_"
+        Write-Warn "Could not register with Codex CLI: $($_)"
     }
 }
 
@@ -314,6 +314,36 @@ function Register-McpOpenCode {
     }
 }
 
+function Register-McpWindsurf {
+    param([string]$BinaryPath)
+    Register-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.codeium\windsurf\mcp_config.json') -ProviderName 'Windsurf' -JsonKey 'mcpServers' -BinaryPath $BinaryPath
+}
+
+function Register-McpVSCode {
+    param([string]$BinaryPath)
+    Register-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.vscode\mcp.json') -ProviderName 'VS Code Copilot' -JsonKey 'servers' -BinaryPath $BinaryPath
+}
+
+function Register-McpGemini {
+    param([string]$BinaryPath)
+    Register-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.gemini\settings.json') -ProviderName 'Gemini CLI' -JsonKey 'mcpServers' -BinaryPath $BinaryPath
+}
+
+function Register-McpAmazonQ {
+    param([string]$BinaryPath)
+    Register-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.aws\amazonq\mcp.json') -ProviderName 'Amazon Q (CLI)' -JsonKey 'mcpServers' -BinaryPath $BinaryPath
+    Register-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.aws\amazonq\default.json') -ProviderName 'Amazon Q (IDE)' -JsonKey 'mcpServers' -BinaryPath $BinaryPath
+}
+
+function Register-McpWarp {
+    param([string]$BinaryPath)
+    $warpPath = Join-Path (Get-Location) '.warp\.mcp.json'
+    if (Test-Path (Split-Path $warpPath -Parent)) {
+        Register-McpProvider -ConfigPath $warpPath -ProviderName 'Warp' -JsonKey 'mcpServers' -BinaryPath $BinaryPath
+    }
+}
+
+
 function Register-McpContinue {
     param([string]$BinaryPath)
     $paths = @(
@@ -331,7 +361,7 @@ function Register-McpContinue {
 function Invoke-McpRegistration {
     param([string]$BinaryPath)
     $providers = if ($McpProviders -eq 'all') {
-        @('claude', 'codex', 'cursor', 'cline', 'opencode', 'continue')
+        @('claude', 'codex', 'cursor', 'cline', 'windsurf', 'vscode', 'opencode', 'gemini', 'amazonq', 'warp', 'continue')
     } else {
         $McpProviders -split ','
     }
@@ -343,6 +373,11 @@ function Invoke-McpRegistration {
             'cursor'   { Register-McpCursor -BinaryPath $BinaryPath }
             'cline'    { Register-McpCline -BinaryPath $BinaryPath }
             'opencode' { Register-McpOpenCode -BinaryPath $BinaryPath }
+            'windsurf' { Register-McpWindsurf -BinaryPath $BinaryPath }
+            'vscode'   { Register-McpVSCode -BinaryPath $BinaryPath }
+            'gemini'   { Register-McpGemini -BinaryPath $BinaryPath }
+            'amazonq'  { Register-McpAmazonQ -BinaryPath $BinaryPath }
+            'warp'     { Register-McpWarp -BinaryPath $BinaryPath }
             'continue' { Register-McpContinue -BinaryPath $BinaryPath }
             default    { Write-Warn "Unknown MCP provider: $p" }
         }
@@ -352,14 +387,19 @@ function Invoke-McpRegistration {
 function Invoke-McpUninstall {
     param([string]$BinaryPath)
     Write-Info "Unregistering '$McpName' from all MCP providers..."
-    $providers = @('claude', 'codex', 'cursor', 'cline', 'opencode', 'continue')
+    $providers = @('claude', 'codex', 'cursor', 'cline', 'windsurf', 'vscode', 'opencode', 'gemini', 'amazonq', 'warp', 'continue')
     foreach ($p in $providers) {
         switch ($p) {
             'claude'   { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.claude.json') -ProviderName 'Claude Code' -JsonKey 'mcpServers' }
             'codex'    { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.codex\config.toml') -ProviderName 'Codex CLI' -JsonKey 'mcp_servers' }
             'cursor'   { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.cursor\mcp.json') -ProviderName 'Cursor' -JsonKey 'mcpServers' }
             'cline'    { Unregister-McpProvider -ConfigPath (Join-Path $env:APPDATA 'Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json') -ProviderName 'Cline' -JsonKey 'mcpServers' }
+            'windsurf' { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.codeium\windsurf\mcp_config.json') -ProviderName 'Windsurf' -JsonKey 'mcpServers' }
+            'vscode'   { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.vscode\mcp.json') -ProviderName 'VS Code Copilot' -JsonKey 'servers' }
             'opencode' { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.opencode.json') -ProviderName 'OpenCode' -JsonKey 'mcpServers' }
+            'gemini'   { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.gemini\settings.json') -ProviderName 'Gemini CLI' -JsonKey 'mcpServers' }
+            'amazonq'  { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.aws\amazonq\mcp.json') -ProviderName 'Amazon Q' -JsonKey 'mcpServers' }
+            'warp'     { Unregister-McpProvider -ConfigPath (Join-Path (Get-Location) '.warp\.mcp.json') -ProviderName 'Warp' -JsonKey 'mcpServers' }
             'continue' { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.continue\config.json') -ProviderName 'Continue' -JsonKey 'mcpServers' }
         }
     }

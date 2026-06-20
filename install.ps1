@@ -38,6 +38,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $BINARY_NAME = "ms"
+$BINARY_FILE = "ms.exe"
 $REPO        = "quangdang46/ms"
 $MAX_RETRIES  = 3
 $DOWNLOAD_TIMEOUT = 120
@@ -140,10 +141,16 @@ function Resolve-Version {
 }
 
 # === Download with retry ===
-function Expand-ArchiveProper($Archive, $Destination) {
-    $Shell = New-Object -ComObject Shell.Application
-    $Zip = $Shell.Namespace((Resolve-Path $Archive).Path)
-    $Shell.Namespace((Resolve-Path $Destination).Path).CopyHere($Zip.Items(), 0x10)
+function Expand-ArchiveSafe {
+    param([string]$ArchivePath, [string]$DestinationPath)
+    try {
+        Expand-Archive -LiteralPath $ArchivePath -DestinationPath $DestinationPath -Force
+    } catch {
+        Write-LogWarn "Expand-Archive failed, trying Shell.Application fallback..."
+        $Shell = New-Object -ComObject Shell.Application
+        $Zip = $Shell.Namespace((Resolve-Path $ArchivePath).Path)
+        $Shell.Namespace((Resolve-Path $DestinationPath).Path).CopyHere($Zip.Items(), 0x10)
+    }
 }
 
 function Install-MsArtifact($ArchiveUrl, $ArchivePath, $VersionForUrl, $Platform) {
@@ -187,17 +194,17 @@ function Install-MsArtifact($ArchiveUrl, $ArchivePath, $VersionForUrl, $Platform
     Write-LogInfo "Extracting..."
     if (Test-Path $ExtractDir) { Remove-Item $ExtractDir -Recurse -Force }
     New-Item $ExtractDir -ItemType Directory -Force | Out-Null
-    Expand-ArchiveProper $ArchivePath $ExtractDir
+    Expand-ArchiveSafe -ArchivePath $ArchivePath -DestinationPath $ExtractDir
 
-    $BinaryPath = Get-ChildItem $ExtractDir -Recurse -File -Name $BINARY_NAME | Select-Object -First 1
-    if (-not $BinaryPath) { Write-Die "Could not find $BINARY_NAME in archive" }
-    $BinaryPath = Join-Path $ExtractDir $BinaryPath
+    $BinaryPath = Get-ChildItem $ExtractDir -Recurse -File -Filter $BINARY_FILE | Select-Object -First 1
+    if (-not $BinaryPath) { Write-Die "Could not find $BINARY_FILE in archive" }
+    $BinaryPath = $BinaryPath.FullName
 
     if (-not (Test-Path $Destination)) {
         New-Item $Destination -ItemType Directory -Force | Out-Null
     }
     $InstallDestDir = Get-Item $Destination
-    $TargetPath = Join-Path $InstallDestDir.FullName $BINARY_NAME
+    $TargetPath = Join-Path $InstallDestDir.FullName $BINARY_FILE
 
     # Atomic: write to temp then move
     $TempTarget = "$TargetPath.tmp"
@@ -208,22 +215,23 @@ function Install-MsArtifact($ArchiveUrl, $ArchivePath, $VersionForUrl, $Platform
 }
 
 function Add-ToPath($Path) {
-    $RcFile = Join-Path $env:USERPROFILE "Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
-    $RcDir = Split-Path $RcFile
-    if (-not (Test-Path $RcDir)) {
-        New-Item -Path $RcDir -ItemType Directory -Force | Out-Null
-    }
-
-    if ((Test-Path $RcFile) -and (Get-Content $RcFile -Raw) -match [Regex]::Escape($Path)) {
+    # Check if PATH already contains the install directory
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($userPath -and ($userPath -like "*${Path}*")) {
+        Write-LogInfo "Install directory already on PATH"
         return
     }
 
     if ($EasyMode) {
-        $PathLine = "`$env:PATH = `"`$env:PATH;$Path`"  # ms installer"
-        $PathLine | Out-File $RcFile -Append -Encoding utf8
-        Write-LogWarn "PATH updated -- restart PowerShell or reload profile to use ms"
+        try {
+            [Environment]::SetEnvironmentVariable('Path', "${Path};${userPath}", 'User')
+            Write-LogWarn "PATH updated (User scope). Restart terminal or log out/in to use ms from anywhere."
+        } catch {
+            Write-LogWarn "Could not update system PATH. Add manually: `$env:PATH += `";$Path`""
+        }
     } else {
-        Write-LogWarn "Add to PATH: `$env:PATH += `";$Path`""
+        Write-LogInfo "To add ms to PATH, run: `$env:Path += `";$Path`""
+        Write-LogInfo "Or re-run with -EasyMode for permanent PATH update"
     }
 }
 
@@ -292,22 +300,26 @@ if (-not $FromSource) {
 Add-ToPath $Destination
 
 # === Verify ===
+# Check for binary (with or without .exe extension)
+$MsBinary = $null
 if (Test-Path (Join-Path $Destination $BINARY_NAME)) {
+    $MsBinary = Join-Path $Destination $BINARY_NAME
+} elseif (Test-Path (Join-Path $Destination $BINARY_FILE)) {
+    $MsBinary = Join-Path $Destination $BINARY_FILE
+}
+
+if ($MsBinary) {
     Write-LogInfo ""
-    Write-Host "  $(Get-CdpColor Green)SUCCESS$(Get-CdpColor NC) -- ms $Version installed to $Destination"
+    Write-Host "  $(Get-CdpColor Green)SUCCESS$(Get-CdpColor NC) -- ms $Version installed to $MsBinary"
     Write-Host ""
     Write-Host "  Run 'ms --help' to get started."
 
-    # Auto-configure MCP providers for AI coding agents
     if (-not $NoMcp) {
-        $MsBinary = Join-Path $Destination $BINARY_NAME
-        if (Test-Path $MsBinary) {
-            Configure-AllMcpProviders $MsBinary
-        }
+        Configure-AllMcpProviders $MsBinary
     }
     Write-Host ""
 } else {
-    Write-LogWarn "Binary installed but --version check failed."
+    Write-LogWarn "Binary installed but not found at $Destination"
     Write-LogWarn "Try re-running with -FromSource"
 }
 

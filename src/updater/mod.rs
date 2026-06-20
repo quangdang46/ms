@@ -222,13 +222,35 @@ impl UpdateDownloader {
     fn find_binary_asset<'a>(&self, release: &'a ReleaseInfo) -> Result<&'a ReleaseAsset> {
         let target = current_target();
 
+        // Determine target OS and arch for flexible matching against full Rust triples
+        // Asset names use full target triples: {arch}-{vendor}-{os}-{env}
+        // e.g., x86_64-pc-windows-msvc, aarch64-apple-darwin, x86_64-unknown-linux-gnu
+        let target_os = if cfg!(target_os = "linux") {
+            "linux"
+        } else if cfg!(target_os = "macos") {
+            "darwin"
+        } else if cfg!(target_os = "windows") {
+            "windows"
+        } else {
+            "unknown"
+        };
+        let target_arch = if cfg!(target_arch = "x86_64") {
+            "x86_64"
+        } else if cfg!(target_arch = "aarch64") {
+            "aarch64"
+        } else {
+            "unknown"
+        };
+
         // Try to find a matching binary
         let candidates: Vec<_> = release
             .assets
             .iter()
             .filter(|a| {
                 let name = a.name.to_lowercase();
-                name.contains("ms") && (name.contains(&target) || is_generic_binary(&name))
+                name.contains("ms")
+                    && (name.contains(target_arch) && name.contains(target_os)
+                        || is_generic_binary(&name))
             })
             .collect();
 
@@ -239,10 +261,13 @@ impl UpdateDownloader {
             )));
         }
 
-        // Prefer target-specific binary
+        // Prefer arch-specific binary (not generic)
         candidates
             .iter()
-            .find(|a| a.name.to_lowercase().contains(&target))
+            .find(|a| {
+                let name = a.name.to_lowercase();
+                name.contains(target_arch) && name.contains(target_os)
+            })
             .or(candidates.first())
             .copied()
             .ok_or_else(|| {
@@ -622,16 +647,6 @@ fn compute_sha256(path: &Path) -> Result<String> {
 }
 
 fn current_target() -> String {
-    let os = if cfg!(target_os = "linux") {
-        "linux"
-    } else if cfg!(target_os = "macos") {
-        "macos"
-    } else if cfg!(target_os = "windows") {
-        "windows"
-    } else {
-        "unknown"
-    };
-
     let arch = if cfg!(target_arch = "x86_64") {
         "x86_64"
     } else if cfg!(target_arch = "aarch64") {
@@ -640,7 +655,17 @@ fn current_target() -> String {
         "unknown"
     };
 
-    format!("{os}-{arch}")
+    let os = if cfg!(target_os = "linux") {
+        "linux"
+    } else if cfg!(target_os = "macos") {
+        "darwin"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "unknown"
+    };
+
+    format!("{arch}-{os}")
 }
 
 fn is_generic_binary(name: &str) -> bool {
@@ -768,6 +793,7 @@ mod tests {
     fn current_target_known_os() {
         let target = current_target();
         let os_known = target.contains("linux")
+            || target.contains("darwin")
             || target.contains("macos")
             || target.contains("windows")
             || target.contains("unknown");

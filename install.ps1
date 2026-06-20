@@ -233,7 +233,7 @@ function Register-McpProvider {
         Merge-Json -FilePath $ConfigPath -Key $JsonKey -Value $mcpEntry
         Write-Success "Registered $McpName with $ProviderName"
     } catch {
-        Write-Warn "Could not register with $ProviderName (config: $ConfigPath): $($_)"
+        Write-Warn "Could not register with ${ProviderName} (config: ${ConfigPath}): $($_)"
     }
 }
 
@@ -253,7 +253,7 @@ function Unregister-McpProvider {
             Write-Success "Unregistered $McpName from $ProviderName"
         }
     } catch {
-        Write-Warn "Could not unregister from $ProviderName: $($_)"
+        Write-Warn "Could not unregister from ${ProviderName}: $($_)"
     }
 }
 

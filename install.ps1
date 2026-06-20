@@ -194,8 +194,9 @@ function Get-ExpectedChecksum {
     }
     $archiveName = Split-Path $ArchiveUrl -Leaf
     $expected = $null
+    $pattern = '^([a-fA-F0-9]{64})\s+' + [Regex]::Escape($archiveName) + '$'
     Get-Content $sumsPath | ForEach-Object {
-        if ($_ -match '^([a-fA-F0-9]{64})\s+\S*ms[-.]') {
+        if ($_ -match $pattern) {
             $expected = $matches[1]
         }
     }

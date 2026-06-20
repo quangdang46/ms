@@ -1,472 +1,500 @@
+#Requires -Version 5.1
 <#
 .SYNOPSIS
-    ms installer for Windows
+    ms installer for Windows — downloads the right binary from GitHub Releases
+    and optionally registers ms as an MCP server with detected AI assistants.
 .DESCRIPTION
-    Downloads and installs the prebuilt ms binary for Windows (x86_64-pc-windows-msvc.zip
-    from the GitHub Releases page), verifies its SHA256 checksum, then installs it to
-    $Destination (default: $HOME/.local/bin). Falls back to building from source if the
-    download fails.
-
-    Usage (PowerShell):
+    Pipe usage (no parameters — uses defaults or env-var overrides):
         irm https://raw.githubusercontent.com/quangdang46/ms/main/install.ps1 | iex
 
-    Options:
-        -Destination  Installation directory (default: "$HOME\.local\bin")
-        -Version      Version to install (default: "latest")
-        -Verify       Skip checksum verification (default: $true)
-        -EasyMode     Auto-add install directory to PATH in PowerShell profile (default: $false)
-        -FromSource   Build from source via cargo (default: $false)
-        -Uninstall    Remove installed binary (default: $false)
-        -NoMcp        Skip MCP provider auto-configuration (default: $false)
+    Direct usage (supports all parameters):
+        iwr https://raw.githubusercontent.com/quangdang46/ms/main/install.ps1 -OutFile install.ps1
+        .\install.ps1 -Version v0.3.0 -EasyMode
 
-    Examples:
-        .\install.ps1                           # install latest
-        .\install.ps1 -Version "v0.1.1"         # specific version
-        .\install.ps1 -EasyMode                  # auto-configure PATH
-        .\install.ps1 -Uninstall                 # remove binary
+    Env-var fallbacks (for the piped form):
+        $env:MS_VERSION          - pin a specific release tag
+        $env:MS_INSTALL_DIR      - override install directory
+        $env:MS_PATH_SCOPE       - User | Profile | None
+        $env:MS_NO_MCP           - set to '1' to skip MCP registration
+        $env:MS_MCP_ONLY         - set to '1' for MCP-only (skip binary install)
+        $env:MS_MCP_PROVIDERS    - comma-separated list (default: all detected)
+        $env:MS_MCP_NAME         - server name (default: ms)
+
+.PARAMETER Version
+    Release tag to install (e.g. 'v0.3.0'). Default: latest.
+.PARAMETER InstallDir
+    Target directory. Default: $env:LOCALAPPDATA\ms\bin.
+.PARAMETER PathScope
+    How to persist PATH: 'User' (default), 'Profile' (append to $PROFILE), 'None'.
+.PARAMETER EasyMode
+    Persist PATH and verify after install.
+.PARAMETER Verify
+    Run ms --version after install as a self-test.
+.PARAMETER Uninstall
+    Remove the ms binary and PATH entries.
+.PARAMETER NoMcp
+    Skip MCP registration.
+.PARAMETER McpOnly
+    Skip binary install; only register MCP (assumes ms is on PATH or in -InstallDir).
+.PARAMETER McpProviders
+    Comma-separated list of MCP providers to register with. Default: all detected.
+.PARAMETER McpName
+    Server name written into MCP configs. Default: ms.
+.PARAMETER McpDryRun
+    Print MCP config writes without touching files.
+.PARAMETER McpUninstall
+    Remove the ms MCP entry from every provider config.
 #>
 param(
-    [string]$Destination = "$HOME\.local\bin",
-    [string]$Version      = "latest",
-    [switch] $Verify       = $true,
-    [switch] $EasyMode     = $false,
-    [switch] $FromSource   = $false,
-    [switch] $Uninstall    = $false,
-    [switch] $NoMcp        = $false,
-    [switch] $Quiet        = $false
+    [string]$Version      = $env:MS_VERSION,
+    [string]$InstallDir   = $env:MS_INSTALL_DIR,
+    [ValidateSet('User', 'Profile', 'None', '')]
+    [string]$PathScope,
+    [switch]$EasyMode,
+    [switch]$Verify,
+    [switch]$Uninstall,
+    [switch]$NoMcp,
+    [switch]$McpOnly,
+    [string]$McpProviders = $env:MS_MCP_PROVIDERS,
+    [string]$McpName      = $env:MS_MCP_NAME,
+    [switch]$McpDryRun,
+    [switch]$McpUninstall
 )
 
-$ErrorActionPreference = "Stop"
-$BINARY_NAME = "ms"
-$BINARY_FILE = "ms.exe"
-$REPO        = "quangdang46/ms"
-$MAX_RETRIES  = 3
-$DOWNLOAD_TIMEOUT = 120
+$ErrorActionPreference = 'Stop'
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-function Get-CdpColor($Color) {
-    if ($null -eq $env:NO_COLOR -and [Console]::IsOutputRedirected -eq $false) {
-        switch ($Color) {
-            "Red"    { return "`e[0;31m" }
-            "Green"  { return "`e[0;32m" }
-            "Yellow" { return "`e[0;33m" }
-            "Blue"   { return "`e[0;34m" }
-            "Bold"   { return "`e[1m" }
-            "NC"     { return "`e[0m" }
-        }
-    }
-    return ""
+# === Defaults ===
+$Owner      = 'quangdang46'
+$Repo       = 'ms'
+$BinaryName = 'ms'
+if (-not $InstallDir) { $InstallDir = Join-Path $env:LOCALAPPDATA 'ms\bin' }
+if (-not $PathScope) {
+    $PathScope = if ($env:MS_PATH_SCOPE) { $env:MS_PATH_SCOPE }
+                 elseif ($EasyMode)       { 'User' }
+                 else                     { 'User' }
 }
+if (-not $McpName) { $McpName = 'ms' }
+if (-not $McpProviders) { $McpProviders = 'all' }
 
-function Write-LogInfo($Message) {
-    if (-not $Quiet) {
-        $Color = Get-CdpColor "Blue"
-        Write-Host "$Color[ms]$(Get-CdpColor NC) $Message"
-    }
-}
-function Write-LogWarn($Message) {
-    $Color = Get-CdpColor "Yellow"
-    [Console]::Error.WriteLine("$Color[ms] WARN: $Message$(Get-CdpColor NC)")
-}
-function Write-LogError($Message) {
-    $Color = Get-CdpColor "Red"
-    [Console]::Error.WriteLine("$Color[ms] ERROR: $Message$(Get-CdpColor NC)")
-}
-function Write-Die($Message) {
-    Write-LogError $Message
-    exit 1
+# === Logging ===
+function Write-Info    { param($m) Write-Host "[$BinaryName] $m" }
+function Write-Success { param($m) Write-Host "[OK] $m" -ForegroundColor Green }
+function Write-Warn    { param($m) Write-Host "[$BinaryName] WARN: $m" -ForegroundColor Yellow }
+
+function Invoke-Quiet {
+    param([Parameter(Mandatory)][scriptblock]$Block)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'SilentlyContinue'
+    try { & $Block 2>&1 | Out-Null } finally { $ErrorActionPreference = $prev }
+    return $LASTEXITCODE
 }
 
-$TempDir = $null
-function Clear-Temp {
-    if ($null -ne $TempDir -and (Test-Path $TempDir)) {
-        Remove-Item $TempDir -Recurse -Force -EA SilentlyContinue
+# === Platform detection ===
+function Get-Target {
+    $arch = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment').PROCESSOR_ARCHITECTURE
+    switch ($arch) {
+        'AMD64' { return 'x86_64-pc-windows-msvc' }
+        'ARM64' { return 'aarch64-pc-windows-msvc' }
+        default { throw "Unsupported architecture: $arch" }
     }
 }
-trap { Clear-Temp; throw }
-$TempDir = [System.IO.Path]::GetTempPath()
-
-# === Uninstall ===
-if ($Uninstall) {
-    $Target = Join-Path $Destination $BINARY_NAME
-    if (Test-Path $Target) {
-        Remove-Item $Target -Force
-        Write-LogInfo "Uninstalled $Target"
-    } else {
-        Write-LogInfo "Not found at $Target -- nothing to uninstall"
-    }
-    return
-}
-
-# === Platform ===
-function Get-Platform {
-    $Arch = switch ($env:PROCESSOR_ARCHITECTURE) {
-        "AMD64"   { "x86_64" }
-        "ARM64"   { "aarch64" }
-        default   { throw "Unsupported architecture: $env:PROCESSOR_ARCHITECTURE" }
-    }
-    return "${Arch}-pc-windows-msvc"
-}
-
-# Pre-compiled regex patterns to avoid []-interpretation issues in PowerShell
-$VERSION_PATTERN = "^[vV]?\d+\.\d+\.\d+(-[\w.]+)?$"
-$CHECKSUM_LINE_PATTERN = "^\s*([a-fA-F0-9]+)\s+"
-$VERSION_URL_PATTERN = "tag/([^/]+)$"
 
 # === Version resolution ===
-function Resolve-Version {
-    if ($Version -ne "latest") {
-        if ($Version -notmatch $VERSION_PATTERN) {
-            Write-Die "Invalid version format: $Version (expected vX.Y.Z or X.Y.Z)"
-        }
-        if ($Version -notmatch "^v") { $Version = "v$Version" }
-        return $Version
-    }
+function Resolve-LatestVersion {
+    $headers = @{ 'User-Agent' = 'ms-installer' }
+    if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $env:GITHUB_TOKEN" }
 
-    Write-LogInfo "Fetching latest version..."
     try {
-        $EffectiveUrl = (Invoke-WebRequest -Uri "https://github.com/${REPO}/releases/latest" `
-            -MaximumRedirection 0 -ErrorAction SilentlyContinue).Headers.Location
-        if ($EffectiveUrl -match $VERSION_URL_PATTERN) {
-            return $matches[1]
-        }
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Owner/$Repo/releases/latest" -Headers $headers
+        if ($release.tag_name -match '^v[\d]') { return $release.tag_name }
     } catch {}
 
     try {
-        $Response = Invoke-RestMethod -Uri "https://api.github.com/repos/${REPO}/releases/latest" `
-            -TimeoutSec 30 -EA SilentlyContinue
-        if ($Response.tag_name) { return $Response.tag_name }
+        $resp = Invoke-WebRequest -Uri "https://github.com/$Owner/$Repo/releases/latest" -MaximumRedirection 0 -ErrorAction SilentlyContinue
+        if ($resp.Headers.Location -match 'tag/([^/]+)$') { return $matches[1] }
     } catch {}
 
-    Write-Die "Could not determine latest version"
+    throw "Could not determine latest version of $Owner/$Repo"
 }
 
-# === Download with retry ===
-function Expand-ArchiveSafe {
-    param([string]$ArchivePath, [string]$DestinationPath)
-    try {
-        Expand-Archive -LiteralPath $ArchivePath -DestinationPath $DestinationPath -Force
-    } catch {
-        Write-LogWarn "Expand-Archive failed, trying Shell.Application fallback..."
-        $Shell = New-Object -ComObject Shell.Application
-        $Zip = $Shell.Namespace((Resolve-Path $ArchivePath).Path)
-        $Shell.Namespace((Resolve-Path $DestinationPath).Path).CopyHere($Zip.Items(), 0x10)
+# === Download helpers ===
+function Get-FileWithRetry {
+    param([string]$Url, [string]$OutPath, [int]$MaxRetries = 3, [int]$TimeoutSec = 120)
+    for ($i = 0; $i -lt $MaxRetries; $i++) {
+        try {
+            Invoke-WebRequest -Uri $Url -OutFile $OutPath -TimeoutSec $TimeoutSec -UseBasicParsing
+            return $true
+        } catch {
+            if ($i -eq $MaxRetries - 1) { return $false }
+            Start-Sleep 3
+        }
+    }
+    return $false
+}
+
+# === Binary install ===
+function Install-BinaryAtomic {
+    param([string]$SourcePath, [string]$DestPath)
+    $tmp = "$DestPath.tmp.$PID"
+    Copy-Item -LiteralPath $SourcePath -Destination $tmp -Force
+
+    $destDir = Split-Path -Parent $DestPath
+    $oldFile = Join-Path $destDir "$BinaryName.old.$PID"
+
+    Remove-Item -LiteralPath $DestPath -Force -ErrorAction SilentlyContinue
+    Move-Item -LiteralPath $tmp -Destination $DestPath -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $DestPath) { return }
+
+    Rename-Item -LiteralPath $DestPath -NewName $oldFile -Force -ErrorAction SilentlyContinue
+    Move-Item -LiteralPath $tmp -Destination $DestPath -Force -ErrorAction SilentlyContinue
+
+    if (-not (Test-Path -LiteralPath $DestPath)) {
+        Move-Item -LiteralPath $oldFile -Destination $DestPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue
+        throw "Install failed: could not replace $DestPath (binary in use?)"
     }
 }
 
-function Install-MsArtifact($ArchiveUrl, $ArchivePath, $VersionForUrl, $Platform) {
-    $ArchiveName = Split-Path $ArchivePath -Leaf
-    $ExtractDir  = Join-Path $TempDir "extract-$ArchiveName"
+# === PATH persistence ===
+function Set-PathPersistence {
+    param([string]$Dir, [string]$Scope)
 
-    if ($Verify) {
-        $ChecksumsUrl = $ArchiveUrl -replace "[^/]+\.zip$", "SHA256SUMS.txt"
-        $ChecksumsPath = Join-Path $TempDir "SHA256SUMS.txt"
-        $Attempt = 0
-        while ($Attempt -lt $MAX_RETRIES) {
-            $Attempt++
-            try {
-                Invoke-WebRequest -Uri $ChecksumsUrl -OutFile $ChecksumsPath -TimeoutSec $DOWNLOAD_TIMEOUT
-                break
-            } catch {
-                if ($Attempt -lt $MAX_RETRIES) {
-                    Write-LogWarn "Checksum download failed (attempt $Attempt/$MAX_RETRIES), retrying..."
-                    Start-Sleep 3
-                } else {
-                    Write-Die "Could not download checksums: $ChecksumsUrl"
-                }
-            }
-        }
+    if ($Scope -eq 'None') { return }
 
-        $ExpectedSha = $null
-        Get-Content $ChecksumsPath | ForEach-Object {
-            if ($_ -match "${CHECKSUM_LINE_PATTERN}$([Regex]::Escape($ArchiveName))$") {
-                $ExpectedSha = $matches[1]
-            }
-        }
-        if (-not $ExpectedSha) { Write-Die "No checksum found for $ArchiveName" }
-
-        $ActualSha = (Get-FileHash -Algorithm SHA256 -Path $ArchivePath).Hash.ToLower()
-        if ($ExpectedSha.ToLower() -ne $ActualSha) {
-            Write-Die "Checksum mismatch. Expected: $ExpectedSha, Got: $ActualSha"
-        }
-        Write-LogInfo "Checksum verified"
-    }
-
-    Write-LogInfo "Extracting..."
-    if (Test-Path $ExtractDir) { Remove-Item $ExtractDir -Recurse -Force }
-    New-Item $ExtractDir -ItemType Directory -Force | Out-Null
-    Expand-ArchiveSafe -ArchivePath $ArchivePath -DestinationPath $ExtractDir
-
-    $BinaryPath = Get-ChildItem $ExtractDir -Recurse -File -Filter $BINARY_FILE | Select-Object -First 1
-    if (-not $BinaryPath) { Write-Die "Could not find $BINARY_FILE in archive" }
-    $BinaryPath = $BinaryPath.FullName
-
-    if (-not (Test-Path $Destination)) {
-        New-Item $Destination -ItemType Directory -Force | Out-Null
-    }
-    $InstallDestDir = Get-Item $Destination
-    $TargetPath = Join-Path $InstallDestDir.FullName $BINARY_FILE
-
-    # Atomic: write to temp then move
-    $TempTarget = "$TargetPath.tmp"
-    Copy-Item $BinaryPath $TempTarget -Force
-    Move-Item $TempTarget $TargetPath -Force
-    if (-not (Test-Path $TargetPath)) { Write-Die "Install failed" }
-    Write-LogInfo "Installed to $TargetPath"
-}
-
-function Add-ToPath($Path) {
-    # Check if PATH already contains the install directory
+    $dir = $Dir.TrimEnd('\')
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if ($userPath -and ($userPath -like "*${Path}*")) {
-        Write-LogInfo "Install directory already on PATH"
+    if ($userPath -and ($userPath -split ';' -contains $dir)) {
+        Write-Info "$dir already on PATH"
         return
     }
 
-    if ($EasyMode) {
-        try {
-            [Environment]::SetEnvironmentVariable('Path', "${Path};${userPath}", 'User')
-            Write-LogWarn "PATH updated (User scope). Restart terminal or log out/in to use ms from anywhere."
-        } catch {
-            Write-LogWarn "Could not update system PATH. Add manually: `$env:PATH += `";$Path`""
-        }
+    $newUserPath = if ($userPath) { "$dir;$userPath" } else { $dir }
+
+    if ($Scope -eq 'User') {
+        [Environment]::SetEnvironmentVariable('Path', $newUserPath, 'User')
+        Write-Warn "Added $dir to User PATH. Restart terminal or log out/in for changes to take effect."
     } else {
-        Write-LogInfo "To add ms to PATH, run: `$env:Path += `";$Path`""
-        Write-LogInfo "Or re-run with -EasyMode for permanent PATH update"
+        $profilePath = $PROFILE
+        $profileDir = Split-Path -Parent $profilePath
+        if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
+        $line = "`$env:PATH = `"$dir;`$env:PATH`"  # added by ms installer"
+        Add-Content -Path $profilePath -Value $line -Encoding UTF8
+        Write-Warn "Added $dir to PATH in $profilePath. Restart PowerShell to apply."
     }
 }
 
-# === Source build fallback ===
-function Build-FromSource {
-    $HasCargo = Get-Command cargo -EA SilentlyContinue
-    if (-not $HasCargo) { Write-Die "cargo not found. Install Rust: https://rustup.rs" }
-
-    Write-LogInfo "Building from source..."
-    $CloneDir = Join-Path $TempDir "ms-src"
-    if (Test-Path $CloneDir) { Remove-Item $CloneDir -Recurse -Force }
-    git clone --depth 1 "https://github.com/$REPO" $CloneDir | Out-Null
-    Push-Location $CloneDir
-    try {
-        $Env:CARGO_TARGET_DIR = Join-Path $TempDir "target"
-        cargo build --release
-        $Env:CARGO_TARGET_DIR = $null
-        $BuiltBin = Join-Path $CloneDir "target\release\$BINARY_NAME.exe"
-        if (-not (Test-Path $BuiltBin)) { Write-Die "Source build failed" }
-        $TargetPath = Join-Path $Destination $BINARY_NAME
-        Copy-Item $BuiltBin $TargetPath -Force
-        Write-LogInfo "Installed from source to $TargetPath"
-    } finally {
-        Pop-Location
+# === SHA256 verification ===
+function Get-ExpectedChecksum {
+    param([string]$ArchiveUrl)
+    $sumsUrl = $ArchiveUrl -replace '[^/]+\.zip$', 'SHA256SUMS.txt'
+    $sumsPath = Join-Path $env:TEMP "ms_sha256sums_$PID.txt"
+    if (-not (Get-FileWithRetry -Url $sumsUrl -OutPath $sumsPath -MaxRetries 1 -TimeoutSec 30)) {
+        return $null
     }
-}
-
-# === Main ===
-$Platform      = Get-Platform
-$Version       = Resolve-Version
-$VersionForUrl = $Version -replace "^v", ""
-
-Write-LogInfo "Platform: $Platform | Version: $Version | Dest: $Destination"
-
-if (-not $FromSource) {
-    $ArchiveName = "ms-$VersionForUrl-$Platform.zip"
-    $ArchiveUrl  = "https://github.com/$REPO/releases/download/$Version/$ArchiveName"
-    $ArchivePath = Join-Path $TempDir $ArchiveName
-
-    $Attempt = 0
-    while ($Attempt -lt $MAX_RETRIES) {
-        $Attempt++
-        Write-LogInfo "Downloading from $ArchiveUrl..."
-        try {
-            Invoke-WebRequest -Uri $ArchiveUrl -OutFile $ArchivePath -TimeoutSec $DOWNLOAD_TIMEOUT
-            break
-        } catch {
-            if ($Attempt -lt $MAX_RETRIES) {
-                Write-LogWarn "Download failed (attempt $Attempt/$MAX_RETRIES), retrying..."
-                Start-Sleep 3
-            } else {
-                Write-LogWarn "Download failed -- building from source..."
-                Build-FromSource
-                Add-ToPath $Destination
-                Write-LogInfo "Run 'ms --version' to verify."
-                return
-            }
+    $archiveName = Split-Path $ArchiveUrl -Leaf
+    $expected = $null
+    Get-Content $sumsPath | ForEach-Object {
+        if ($_ -match '^([a-fA-F0-9]{64})\s+\S*ms[-.]') {
+            $expected = $matches[1]
         }
     }
-
-    Install-MsArtifact $ArchiveUrl $ArchivePath $VersionForUrl $Platform
-} else {
-    Build-FromSource
+    Remove-Item -LiteralPath $sumsPath -Force -ErrorAction SilentlyContinue
+    return $expected
 }
 
-Add-ToPath $Destination
-
-# === Verify ===
-# Check for binary (with or without .exe extension)
-$MsBinary = $null
-if (Test-Path (Join-Path $Destination $BINARY_NAME)) {
-    $MsBinary = Join-Path $Destination $BINARY_NAME
-} elseif (Test-Path (Join-Path $Destination $BINARY_FILE)) {
-    $MsBinary = Join-Path $Destination $BINARY_FILE
-}
-
-if ($MsBinary) {
-    Write-LogInfo ""
-    Write-Host "  $(Get-CdpColor Green)SUCCESS$(Get-CdpColor NC) -- ms $Version installed to $MsBinary"
-    Write-Host ""
-    Write-Host "  Run 'ms --help' to get started."
-
-    if (-not $NoMcp) {
-        Configure-AllMcpProviders $MsBinary
-    }
-    Write-Host ""
-} else {
-    Write-LogWarn "Binary installed but not found at $Destination"
-    Write-LogWarn "Try re-running with -FromSource"
-}
-
-# === MCP Provider Auto-Configuration ===
-
-<#
-.SYNOPSIS
-    Merge JSON into a file at a specified key path.
-.DESCRIPTION
-    Adds or updates a JSON value at the given top-level key in a JSON file.
-#>
-function Merge-JsonIntoFile {
-    param([string]$FilePath, [string]$Key, [hashtable]$Value)
+# === MCP registration ===
+function Merge-Json {
+    param([string]$FilePath, [string]$Key, $Value)
     $data = @{}
     if (Test-Path $FilePath) {
-        $content = Get-Content -Path $FilePath -Raw -ErrorAction SilentlyContinue
-        if ($content) {
-            try { $data = $content | ConvertFrom-Json -AsHashtable } catch { $data = @{} }
-        }
+        try { $data = Get-Content -Raw $FilePath | ConvertFrom-Json -AsHashtable } catch {}
     }
-    if (-not $data.ContainsKey($Key)) { $data[$Key] = @{} }
-    foreach ($k in $Value.Keys) { $data[$Key][$k] = $Value[$k] }
-    $dir = Split-Path $FilePath -Parent
-    if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+    $data[$Key] = $Value
+    $dir = Split-Path -Parent $FilePath
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    if ($McpDryRun) {
+        Write-Warn "[dry-run] Would write to $FilePath"
+        return
+    }
     $data | ConvertTo-Json -Depth 10 | Set-Content -Path $FilePath -Encoding UTF8
 }
 
-<#
-.SYNOPSIS
-    Register ms as an MCP server for a single JSON-based provider.
-#>
 function Register-McpProvider {
-    param([string]$ProviderName, [string]$SettingsFile, [string]$JsonKey, [string]$BinaryPath)
-    if (-not (Test-Path $BinaryPath)) { return }
-    Write-LogInfo "  Configuring MCP for $ProviderName..."
+    param([string]$ConfigPath, [string]$ProviderName, [string]$JsonKey, [string]$BinaryPath)
     $mcpEntry = @{
-        "ms" = @{
+        $McpName = @{
             command = $BinaryPath
-            args    = @("mcp", "serve")
+            args    = @('mcp', 'serve')
             env     = @{}
         }
     }
-    Merge-JsonIntoFile -FilePath $SettingsFile -Key $JsonKey -Value $mcpEntry
+    try {
+        Merge-Json -FilePath $ConfigPath -Key $JsonKey -Value $mcpEntry
+        Write-Success "Registered $McpName with $ProviderName"
+    } catch {
+        Write-Warn "Could not register with $ProviderName (config: $ConfigPath): $_"
+    }
 }
 
-<#
-.SYNOPSIS
-    Register ms MCP in Codex CLI (TOML format).
-#>
+function Unregister-McpProvider {
+    param([string]$ConfigPath, [string]$ProviderName, [string]$JsonKey)
+    if (-not (Test-Path $ConfigPath)) { return }
+    try {
+        $data = Get-Content -Raw $ConfigPath | ConvertFrom-Json -AsHashtable
+        if ($data.ContainsKey($JsonKey) -and $data[$JsonKey].ContainsKey($McpName)) {
+            $data[$JsonKey].Remove($McpName)
+            if ($data[$JsonKey].Count -eq 0) { $data.Remove($JsonKey) }
+            if ($McpDryRun) {
+                Write-Warn "[dry-run] Would remove $McpName from $ProviderName ($ConfigPath)"
+                return
+            }
+            $data | ConvertTo-Json -Depth 10 | Set-Content -Path $ConfigPath -Encoding UTF8
+            Write-Success "Unregistered $McpName from $ProviderName"
+        }
+    } catch {
+        Write-Warn "Could not unregister from $ProviderName: $_"
+    }
+}
+
+function Register-McpClaude {
+    param([string]$BinaryPath)
+    Register-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.claude.json') -ProviderName 'Claude Code' -JsonKey 'mcpServers' -BinaryPath $BinaryPath
+}
+
 function Register-McpCodex {
     param([string]$BinaryPath)
-    $configFile = Join-Path $env:USERPROFILE ".codex\config.toml"
-    $configDir = Split-Path $configFile -Parent
-    if (-not (Test-Path $configDir)) { return }
-    Write-LogInfo "  Configuring MCP for Codex CLI..."
-    $content = ""
-    if (Test-Path $configFile) {
-        $content = Get-Content $configFile -Raw
-    }
-    $serverBlock = @"
+    $configPath = Join-Path $env:USERPROFILE '.codex\config.toml'
+    if (-not (Test-Path (Split-Path $configPath -Parent))) { return }
+    try {
+        $content = ''
+        if (Test-Path $configPath) { $content = Get-Content -Raw $configPath }
+        $serverBlock = @"
 
-[mcp_servers.ms]
+[mcp_servers.$McpName]
 type = "stdio"
 command = "$BinaryPath"
 args = ["mcp", "serve"]
 "@
-    $content += $serverBlock
-    $dir = Split-Path $configFile -Parent
-    if (-not (Test-Path $dir)) { New-Item $dir -ItemType Directory -Force | Out-Null }
-    Set-Content -Path $configFile -Value $content -Encoding UTF8
+        if ($McpDryRun) {
+            Write-Warn "[dry-run] Would append MCP server to $configPath"
+            return
+        }
+        Add-Content -Path $configPath -Value $serverBlock -Encoding UTF8
+        Write-Success "Registered $McpName with Codex CLI"
+    } catch {
+        Write-Warn "Could not register with Codex CLI: $_"
+    }
 }
 
-<#
-.SYNOPSIS
-    Register ms MCP in OpenCode (uses env as array).
-#>
+function Register-McpCursor {
+    param([string]$BinaryPath)
+    Register-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.cursor\mcp.json') -ProviderName 'Cursor' -JsonKey 'mcpServers' -BinaryPath $BinaryPath
+}
+
+function Register-McpCline {
+    param([string]$BinaryPath)
+    $clinePath = Join-Path $env:APPDATA 'Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json'
+    if (Test-Path (Split-Path $clinePath -Parent)) {
+        Register-McpProvider -ConfigPath $clinePath -ProviderName 'Cline' -JsonKey 'mcpServers' -BinaryPath $BinaryPath
+    }
+}
+
 function Register-McpOpenCode {
     param([string]$BinaryPath)
-    $settingsFile = Join-Path $env:USERPROFILE ".opencode.json"
-    if (-not (Test-Path $settingsFile)) {
-        $xdgPath = Join-Path $env:USERPROFILE ".config\opencode\.opencode.json"
-        if (Test-Path $xdgPath) { $settingsFile = $xdgPath } else { return }
-    }
-    Write-LogInfo "  Configuring MCP for OpenCode..."
-    $mcpEntry = @{
-        "ms" = @{
-            type    = "stdio"
-            command = $BinaryPath
-            args    = @("mcp", "serve")
-            env     = @()
+    $paths = @(
+        (Join-Path $env:USERPROFILE '.opencode.json'),
+        (Join-Path $env:USERPROFILE '.config\opencode\.opencode.json')
+    )
+    foreach ($p in $paths) {
+        if (Test-Path $p) {
+            Register-McpProvider -ConfigPath $p -ProviderName 'OpenCode' -JsonKey 'mcpServers' -BinaryPath $BinaryPath
+            return
         }
     }
-    Merge-JsonIntoFile -FilePath $settingsFile -Key "mcpServers" -Value $mcpEntry
 }
 
-<#
-.SYNOPSIS
-    Configure all 10 MCP providers for the ms MCP server.
-#>
-function Configure-AllMcpProviders {
+function Register-McpContinue {
     param([string]$BinaryPath)
-
-    $mcpEntry = @{
-        "ms" = @{
-            command = $BinaryPath
-            args    = @("mcp", "serve")
-            env     = @{}
+    $paths = @(
+        (Join-Path $env:USERPROFILE '.continue\config.json'),
+        (Join-Path $env:USERPROFILE '.continue\config.yaml')
+    )
+    foreach ($p in $paths) {
+        if (Test-Path $p) {
+            Register-McpProvider -ConfigPath $p -ProviderName 'Continue' -JsonKey 'mcpServers' -BinaryPath $BinaryPath
+            return
         }
     }
-
-    Write-LogInfo "Configuring MCP providers for AI coding agents..."
-
-    # 1. Claude Code -- ~/.claude.json (root of home)
-    Register-McpProvider -ProviderName "Claude Code" -SettingsFile (Join-Path $env:USERPROFILE ".claude.json") -JsonKey "mcpServers" -BinaryPath $BinaryPath
-
-    # 2. Cursor -- ~/.cursor/mcp.json
-    Register-McpProvider -ProviderName "Cursor" -SettingsFile (Join-Path $env:USERPROFILE ".cursor\mcp.json") -JsonKey "mcpServers" -BinaryPath $BinaryPath
-
-    # 3. Cline -- VS Code globalStorage
-    $clinePath = Join-Path $env:APPDATA "Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json"
-    if (Test-Path (Split-Path $clinePath -Parent)) {
-        Register-McpProvider -ProviderName "Cline" -SettingsFile $clinePath -JsonKey "mcpServers" -BinaryPath $BinaryPath
-    }
-
-    # 4. Windsurf -- ~/.codeium/windsurf/mcp_config.json
-    Register-McpProvider -ProviderName "Windsurf" -SettingsFile (Join-Path $env:USERPROFILE ".codeium\windsurf\mcp_config.json") -JsonKey "mcpServers" -BinaryPath $BinaryPath
-
-    # 5. VS Code Copilot -- uses "servers" key
-    Register-McpProvider -ProviderName "VS Code Copilot" -SettingsFile (Join-Path $env:USERPROFILE ".vscode\mcp.json") -JsonKey "servers" -BinaryPath $BinaryPath
-
-    # 6. OpenCode -- special env format
-    Register-McpOpenCode -BinaryPath $BinaryPath
-
-    # 7. Codex CLI -- TOML
-    Register-McpCodex -BinaryPath $BinaryPath
-
-    # 8. Gemini CLI -- ~/.gemini/settings.json
-    Register-McpProvider -ProviderName "Gemini CLI" -SettingsFile (Join-Path $env:USERPROFILE ".gemini\settings.json") -JsonKey "mcpServers" -BinaryPath $BinaryPath
-
-    # 9. Amazon Q -- write both paths
-    Register-McpProvider -ProviderName "Amazon Q" -SettingsFile (Join-Path $env:USERPROFILE ".aws\amazonq\mcp.json") -JsonKey "mcpServers" -BinaryPath $BinaryPath
-    Register-McpProvider -ProviderName "Amazon Q (IDE)" -SettingsFile (Join-Path $env:USERPROFILE ".aws\amazonq\default.json") -JsonKey "mcpServers" -BinaryPath $BinaryPath
-
-    # 10. Warp -- project-scoped .warp/.mcp.json
-    if (Test-Path ".warp" -PathType Container -or (Test-Path "Cargo.toml")) {
-        Register-McpProvider -ProviderName "Warp" -SettingsFile ".warp\.mcp.json" -JsonKey "mcpServers" -BinaryPath $BinaryPath
-    }
-
-    Write-LogInfo "MCP provider configuration complete."
 }
+
+function Invoke-McpRegistration {
+    param([string]$BinaryPath)
+    $providers = if ($McpProviders -eq 'all') {
+        @('claude', 'codex', 'cursor', 'cline', 'opencode', 'continue')
+    } else {
+        $McpProviders -split ','
+    }
+    Write-Info "Registering '$McpName' with MCP providers ($($providers -join ', '))..."
+    foreach ($p in $providers) {
+        switch ($p.Trim()) {
+            'claude'   { Register-McpClaude -BinaryPath $BinaryPath }
+            'codex'    { Register-McpCodex -BinaryPath $BinaryPath }
+            'cursor'   { Register-McpCursor -BinaryPath $BinaryPath }
+            'cline'    { Register-McpCline -BinaryPath $BinaryPath }
+            'opencode' { Register-McpOpenCode -BinaryPath $BinaryPath }
+            'continue' { Register-McpContinue -BinaryPath $BinaryPath }
+            default    { Write-Warn "Unknown MCP provider: $p" }
+        }
+    }
+}
+
+function Invoke-McpUninstall {
+    param([string]$BinaryPath)
+    Write-Info "Unregistering '$McpName' from all MCP providers..."
+    $providers = @('claude', 'codex', 'cursor', 'cline', 'opencode', 'continue')
+    foreach ($p in $providers) {
+        switch ($p) {
+            'claude'   { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.claude.json') -ProviderName 'Claude Code' -JsonKey 'mcpServers' }
+            'codex'    { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.codex\config.toml') -ProviderName 'Codex CLI' -JsonKey 'mcp_servers' }
+            'cursor'   { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.cursor\mcp.json') -ProviderName 'Cursor' -JsonKey 'mcpServers' }
+            'cline'    { Unregister-McpProvider -ConfigPath (Join-Path $env:APPDATA 'Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json') -ProviderName 'Cline' -JsonKey 'mcpServers' }
+            'opencode' { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.opencode.json') -ProviderName 'OpenCode' -JsonKey 'mcpServers' }
+            'continue' { Unregister-McpProvider -ConfigPath (Join-Path $env:USERPROFILE '.continue\config.json') -ProviderName 'Continue' -JsonKey 'mcpServers' }
+        }
+    }
+}
+
+# ============================================================================
+# Main
+# ============================================================================
+
+function Main {
+    # ── Uninstall mode ──────────────────────────────────────────────────────
+    if ($Uninstall) {
+        $target = Join-Path $InstallDir "$BinaryName.exe"
+        if (Test-Path $target) {
+            Remove-Item -LiteralPath $target -Force
+            Write-Success "removed $target"
+        }
+        Set-PathPersistence -Dir $InstallDir -Scope 'None'
+        Invoke-McpUninstall
+        return
+    }
+
+    # ── Resolve version ─────────────────────────────────────────────────────
+    if (-not $Version) {
+        Write-Info "Fetching latest version..."
+        $Version = Resolve-LatestVersion
+        Write-Info "Latest version: $Version"
+    } elseif ($Version -notmatch '^v') {
+        $Version = "v$Version"
+    }
+
+    # ── Platform ────────────────────────────────────────────────────────────
+    $target = Get-Target
+    Write-Info "Platform: $target | Version: $Version | InstallDir: $InstallDir"
+
+    # ── MCP-only mode ──────────────────────────────────────────────────────
+    if ($McpOnly) {
+        $binaryPath = Join-Path $InstallDir "$BinaryName.exe"
+        if (-not (Test-Path $binaryPath)) {
+            $binaryPath = (Get-Command $BinaryName -ErrorAction SilentlyContinue).Source
+        }
+        if (-not $binaryPath) {
+            Write-Warn "$BinaryName not found on PATH or in $InstallDir. Run without -McpOnly first."
+            return
+        }
+        Invoke-McpRegistration -BinaryPath $binaryPath
+        return
+    }
+
+    # ── Download archive ────────────────────────────────────────────────────
+    $versionForUrl = $Version -replace '^v', ''
+    $archiveName = "ms-$versionForUrl-$target.zip"
+    $archiveUrl  = "https://github.com/$Owner/$Repo/releases/download/$Version/$archiveName"
+    $archivePath = Join-Path $env:TEMP "ms_$PID.zip"
+
+    Write-Info "Downloading $archiveName..."
+    if (-not (Get-FileWithRetry -Url $archiveUrl -OutPath $archivePath)) {
+        throw "Download failed after retries: $archiveUrl"
+    }
+
+    # ── SHA256 verification ────────────────────────────────────────────────
+    Write-Info "Verifying checksum..."
+    $expected = Get-ExpectedChecksum -ArchiveUrl $archiveUrl
+    if ($expected) {
+        $actual = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLower()
+        if ($actual -ne $expected.ToLower()) {
+            Remove-Item -LiteralPath $archivePath -Force
+            throw "Checksum mismatch. Expected: $expected, Got: $actual"
+        }
+        Write-Info "Checksum verified"
+    } else {
+        Write-Warn "No checksum file found — skipping verification"
+    }
+
+    # ── Extract ────────────────────────────────────────────────────────
+    Write-Info "Extracting..."
+    $extractDir = Join-Path $env:TEMP "ms_extract_$PID"
+    try {
+        if (Test-Path $extractDir) { Remove-Item -Recurse -Force $extractDir }
+        New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+        try {
+            Expand-Archive -LiteralPath $archivePath -DestinationPath $extractDir -Force
+        } catch {
+            # Fallback: Shell.Application COM (Windows PowerShell)
+            $shell = New-Object -ComObject Shell.Application
+            $zip = $shell.Namespace((Resolve-Path $archivePath).Path)
+            $shell.Namespace((Resolve-Path $extractDir).Path).CopyHere($zip.Items(), 0x10)
+        }
+
+        $binaryFile = Get-ChildItem -LiteralPath $extractDir -Recurse -File -Filter "$BinaryName.exe" | Select-Object -First 1
+        if (-not $binaryFile) { throw "Could not find $BinaryName.exe in archive" }
+
+        # ── Install ────────────────────────────────────────────────────────
+        if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null }
+        $dest = Join-Path $InstallDir "$BinaryName.exe"
+        Install-BinaryAtomic -SourcePath $binaryFile.FullName -DestPath $dest
+        try { Unblock-File -LiteralPath $dest -ErrorAction SilentlyContinue } catch {}
+
+        # PE header sanity check
+        $head = [System.IO.File]::ReadAllBytes($dest)[0..1]
+        if (-not ($head[0] -eq 0x4D -and $head[1] -eq 0x5A)) {
+            throw "Installed $dest does not have a valid PE header. The download was corrupted."
+        }
+
+        Set-PathPersistence -Dir $InstallDir -Scope $PathScope
+
+        # Self-test
+        $selfTest = & $dest --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Self-test failed: $selfTest"
+        }
+        Write-Success "Self-test passed: $($selfTest | Select-Object -First 1)"
+    } finally {
+        Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
+    }
+
+    # ── MCP registration ───────────────────────────────────────────────────
+    if (-not $NoMcp) {
+        $dest = Join-Path $InstallDir "$BinaryName.exe"
+        Invoke-McpRegistration -BinaryPath $dest
+    }
+
+    # ── Summary ─────────────────────────────────────────────────────────────
+    $dest = Join-Path $InstallDir "$BinaryName.exe"
+    Write-Host ""
+    Write-Success "ms $Version installed to $dest"
+    Write-Host ""
+    Write-Host "Quick start (open a new PowerShell window for PATH changes):"
+    Write-Host "  ms --help"
+    Write-Host "  ms doctor"
+    Write-Host "  ms search <query>"
+    if (-not $NoMcp) {
+        Write-Host "  ms mcp serve        # MCP server (registered with detected agents)"
+    }
+}
+
+Main

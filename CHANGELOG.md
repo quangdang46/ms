@@ -5,7 +5,35 @@ All notable changes to **ms** (Meta Skill CLI) are documented here.
 > Repository: <https://github.com/quangdang46/ms>
 >
 > Conventions: entries are organized by landed capabilities, not raw diff order.
-> Only `v0.1.0` has a corresponding [GitHub Release](https://github.com/quangdang46/ms/releases/tag/v0.1.0); `v0.1.1` is a plain git tag (CI build-fix only). Everything after `v0.1.1` is unreleased work on `main`.
+
+---
+
+## [0.3.1] -- 2026-07-12
+
+Patch release: Windows installer hardening, production fixes, MCP provider coverage, and security advisory resolution.
+
+### Installer / Windows
+
+- **Windows install rewrite** -- `install.ps1` rewritten on the ffs pattern (clean PowerShell, no ANSI codes, no trap errors) ([`a0efb6f`](https://github.com/quangdang46/ms/commit/a0efb6f))
+- **Windows install fixes** -- `.exe` binary detection, archive extraction, PATH setup, and updater target matching ([`50e917e`](https://github.com/quangdang46/ms/commit/50e917e))
+- **PowerShell parsing** -- delimit catch-block variables followed by colon so parsing no longer breaks ([`4c3e096`](https://github.com/quangdang46/ms/commit/4c3e096))
+- **Checksum verification** -- match the specific archive name instead of any `ms-` file ([`4e1aebf`](https://github.com/quangdang46/ms/commit/4e1aebf))
+
+### Features
+
+- **MCP providers** -- add Windsurf, VS Code Copilot, Gemini CLI, Amazon Q, and Warp to installer MCP wiring ([`7d46f62`](https://github.com/quangdang46/ms/commit/7d46f62))
+
+### Bug Fixes
+
+- **Upstream production fixes** -- port critical upstream fixes for backup, search, MCP, spec lens, UBS, and ACIP (without fsqlite migration) ([`7bd0c7f`](https://github.com/quangdang46/ms/commit/7bd0c7f))
+
+### Security / CI
+
+- **cargo-deny advisories** -- resolve `quick-xml` RUSTSEC-2026-0194 / RUSTSEC-2026-0195 so Security Audit passes ([`7be7a79`](https://github.com/quangdang46/ms/commit/7be7a79))
+
+### Housekeeping
+
+- **Remove deprecated meta skills** -- drop `api-design`, `frontend-polish`, and `rust-safety` meta-skill stubs ([`1057184`](https://github.com/quangdang46/ms/commit/1057184))
 
 ---
 

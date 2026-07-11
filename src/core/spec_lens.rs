@@ -5,6 +5,11 @@ use serde_json::Value as JsonValue;
 use super::skill::{BlockType, SkillBlock, SkillMetadata, SkillSection, SkillSpec};
 use crate::error::{MsError, Result};
 
+/// Synthetic section id for body prose that appears between the H1 and the
+/// first `##` heading. Kept stable so `compile_markdown` can suppress the
+/// empty `##` title while still round-tripping the content (issue #150).
+const PREAMBLE_SECTION_ID: &str = "__preamble";
+
 /// Bidirectional mapping between `SkillSpec` and SKILL.md.
 pub struct SpecLens;
 
@@ -169,6 +174,17 @@ pub fn parse_markdown(content: &str) -> Result<SkillSpec> {
             continue;
         }
 
+        // Body prose before the first `##` has no real section to land in.
+        // Open a synthetic preamble section so the content is retained rather
+        // than silently discarded (issue #150).
+        if current_section.is_none() && !line.trim().is_empty() {
+            current_section = Some(SkillSection {
+                id: PREAMBLE_SECTION_ID.to_string(),
+                title: String::new(),
+                blocks: Vec::new(),
+            });
+        }
+
         let Some(section) = current_section.as_mut() else {
             continue;
         };
@@ -211,9 +227,44 @@ pub fn parse_markdown(content: &str) -> Result<SkillSpec> {
         slugify(&name)
     };
 
-    // If description wasn't in frontmatter, use extracted one
+    let extracted_description = description_lines.join("\n").trim().to_string();
+
+    // Without frontmatter, the first post-H1 paragraph is the description. If
+    // frontmatter already supplied a description, an exact repeated paragraph
+    // is compiler-generated canonical text; any distinct paragraph is body
+    // content and belongs at the front of the heading-less preamble section.
     if metadata.description.is_empty() {
-        metadata.description = description_lines.join("\n").trim().to_string();
+        metadata.description = extracted_description;
+    } else if !extracted_description.is_empty()
+        && extracted_description.trim() != metadata.description.trim()
+    {
+        let preamble = if sections
+            .first()
+            .is_some_and(|section| section.id == PREAMBLE_SECTION_ID)
+        {
+            &mut sections[0]
+        } else {
+            sections.insert(
+                0,
+                SkillSection {
+                    id: PREAMBLE_SECTION_ID.to_string(),
+                    title: String::new(),
+                    blocks: Vec::new(),
+                },
+            );
+            &mut sections[0]
+        };
+        preamble.blocks.insert(
+            0,
+            SkillBlock {
+                id: String::new(),
+                block_type: BlockType::Text,
+                content: extracted_description,
+            },
+        );
+        for (index, block) in preamble.blocks.iter_mut().enumerate() {
+            block.id = format!("{PREAMBLE_SECTION_ID}-block-{}", index + 1);
+        }
     }
 
     // If name wasn't in frontmatter, use extracted one
@@ -264,7 +315,10 @@ pub fn compile_markdown(spec: &SkillSpec) -> String {
     }
 
     for section in &spec.sections {
-        output.push_str(&format!("## {}\n\n", section.title));
+        // Preamble sections have an empty title; do not emit a bare `## `.
+        if section.id != PREAMBLE_SECTION_ID || !section.title.is_empty() {
+            output.push_str(&format!("## {}\n\n", section.title));
+        }
         for block in &section.blocks {
             if block.block_type == BlockType::Code {
                 let content = block.content.trim_end();
@@ -322,7 +376,7 @@ fn json_equivalent(left: &JsonValue, right: &JsonValue) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{compile_markdown, parse_markdown};
+    use super::{BlockType, PREAMBLE_SECTION_ID, compile_markdown, parse_markdown};
 
     #[test]
     #[ignore = "TODO(0.2.x): markdown roundtrip currently asserts an outdated frontmatter shape; preexisting on v0.1.0"]
@@ -341,6 +395,84 @@ mod tests {
         let parsed = parse_markdown(md).expect("parse");
         assert_eq!(parsed.metadata.name, "Tagged Skill");
         assert_eq!(parsed.metadata.tags, vec!["rust", "backend"]);
+    }
+
+    #[test]
+    fn fenced_hash_comments_are_not_parsed_as_headings() {
+        // A `## Demo` section whose bash fence contains start-of-line `#`/`##`
+        // comment lines must round-trip with the code block INTACT (issue #134).
+        let md = "# Real Skill\n\nA description.\n\n## Demo\n\n```bash\n# not a heading\n## also not a heading\necho hi\n```\n";
+        let parsed = parse_markdown(md).expect("parse");
+
+        assert_eq!(parsed.metadata.name, "Real Skill");
+        assert_eq!(
+            parsed.sections.len(),
+            1,
+            "expected exactly one section, got: {:?}",
+            parsed
+                .sections
+                .iter()
+                .map(|s| s.title.clone())
+                .collect::<Vec<_>>()
+        );
+        let section = &parsed.sections[0];
+        assert_eq!(section.title, "Demo");
+
+        let code_blocks: Vec<&_> = section
+            .blocks
+            .iter()
+            .filter(|b| b.block_type == BlockType::Code)
+            .collect();
+        assert_eq!(code_blocks.len(), 1);
+        let code = &code_blocks[0].content;
+        assert!(code.contains("# not a heading"), "code: {code:?}");
+        assert!(code.contains("## also not a heading"), "code: {code:?}");
+        assert!(code.contains("echo hi"), "code: {code:?}");
+
+        let compiled = compile_markdown(&parsed);
+        assert!(compiled.contains("# not a heading"), "compiled: {compiled}");
+        assert!(
+            compiled.contains("## also not a heading"),
+            "compiled: {compiled}"
+        );
+    }
+
+    #[test]
+    fn frontmatter_description_does_not_discard_distinct_h1_preamble() {
+        let md = "---\nname: Preamble Skill\ndescription: Short catalog summary\n---\n\n# Preamble Skill\n\nThis intro carries unique token preamblecanary.\n\nA second intro paragraph must survive too.\n\n## Notes\n\nSection content.\n";
+        let parsed = parse_markdown(md).expect("parse");
+
+        assert_eq!(parsed.metadata.description, "Short catalog summary");
+        let preamble = parsed
+            .sections
+            .first()
+            .expect("heading-less preamble section");
+        assert_eq!(preamble.id, PREAMBLE_SECTION_ID);
+        assert!(preamble.title.is_empty());
+        assert_eq!(preamble.blocks.len(), 2);
+        assert!(preamble.blocks[0].content.contains("preamblecanary"));
+        assert!(
+            preamble.blocks[1]
+                .content
+                .contains("second intro paragraph")
+        );
+
+        let compiled = compile_markdown(&parsed);
+        assert!(compiled.contains("preamblecanary"));
+        assert!(compiled.contains("A second intro paragraph must survive too."));
+        assert!(!compiled.contains("## \n"));
+
+        let reparsed = parse_markdown(&compiled).expect("reparse canonical markdown");
+        assert_eq!(
+            reparsed.sections[0].blocks.len(),
+            2,
+            "the canonical metadata description must not reappear as a body block"
+        );
+        assert!(
+            reparsed.sections[0].blocks[0]
+                .content
+                .contains("preamblecanary")
+        );
     }
 
     #[test]

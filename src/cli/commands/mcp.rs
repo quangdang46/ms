@@ -730,6 +730,11 @@ fn run_serve(ctx: &AppContext, args: &ServeArgs) -> Result<()> {
         }
     }
 
+    // Own a mutable copy of the context so the server can reopen its backing
+    // store if the on-disk state directory is rebuilt/replaced underneath it
+    // while it runs (issue #135). The clone shares the same open `Arc` handles
+    // until the first reopen swaps in fresh ones.
+    let ctx = ctx.clone();
     if let Some(port) = args.tcp_port {
         run_tcp_server(ctx, port, debug)
     } else {
@@ -743,7 +748,7 @@ fn run_serve(ctx: &AppContext, args: &ServeArgs) -> Result<()> {
 /// Connections are handled sequentially: agents typically open exactly one
 /// connection, and serializing requests avoids the locking complexity of
 /// concurrent SQLite/search-index access through `AppContext`.
-fn run_tcp_server(ctx: &AppContext, port: u16, debug: bool) -> Result<()> {
+fn run_tcp_server(mut ctx: AppContext, port: u16, debug: bool) -> Result<()> {
     let addr = format!("127.0.0.1:{port}");
     let listener = TcpListener::bind(&addr)
         .map_err(|e| MsError::Config(format!("failed to bind MCP TCP listener on {addr}: {e}")))?;
@@ -754,6 +759,11 @@ fn run_tcp_server(ctx: &AppContext, port: u16, debug: bool) -> Result<()> {
         // Always print the bind so callers can confirm the port is open.
         eprintln!("[ms-mcp] MCP server listening on {addr}");
     }
+
+    // Identity of the backing store we currently have open. Re-checked before
+    // each request so a rebuild that renames the state dir out from under us is
+    // detected and the DB + search index are reopened (issue #135).
+    let mut opened = ctx.store_identity();
 
     for stream in listener.incoming() {
         let stream = match stream {
@@ -803,7 +813,9 @@ fn run_tcp_server(ctx: &AppContext, port: u16, debug: bool) -> Result<()> {
                 eprintln!("[ms-mcp] <- {line}");
             }
 
-            if let Some(response) = handle_request(ctx, &line, debug) {
+            maybe_reopen_stores(&mut ctx, &mut opened, debug);
+
+            if let Some(response) = handle_request(&ctx, &line, debug) {
                 let response_json = serialize_response_safe(&response);
                 if let Err(e) = validate_mcp_json(&response_json) {
                     warn!("MCP response validation failed after sanitization: {}", e);
@@ -828,9 +840,14 @@ fn run_tcp_server(ctx: &AppContext, port: u16, debug: bool) -> Result<()> {
     Ok(())
 }
 
-fn run_stdio_server(ctx: &AppContext, debug: bool) -> Result<()> {
+fn run_stdio_server(mut ctx: AppContext, debug: bool) -> Result<()> {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
+
+    // Identity of the backing store we currently have open. Re-checked before
+    // each request so a rebuild that renames the state dir out from under us is
+    // detected and the DB + search index are reopened (issue #135).
+    let mut opened = ctx.store_identity();
 
     for line in stdin.lock().lines() {
         let line = match line {
@@ -851,8 +868,13 @@ fn run_stdio_server(ctx: &AppContext, debug: bool) -> Result<()> {
             eprintln!("[ms-mcp] <- {line}");
         }
 
+        // Reopen the DB + search index first if the on-disk store was rebuilt
+        // since we last opened it — otherwise we would serve stale reads and
+        // land writes in the orphaned (renamed) directory (issue #135).
+        maybe_reopen_stores(&mut ctx, &mut opened, debug);
+
         // Handle request - returns None for notifications (no response needed)
-        if let Some(response) = handle_request(ctx, &line, debug) {
+        if let Some(response) = handle_request(&ctx, &line, debug) {
             // CRITICAL: Use safe serialization to ensure no ANSI codes leak through
             let response_json = serialize_response_safe(&response);
 
@@ -880,6 +902,47 @@ fn run_stdio_server(ctx: &AppContext, debug: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Reopen the backing store if it changed on disk since `opened` was recorded.
+///
+/// A long-running `ms mcp serve` holds open file descriptors into the state
+/// directory. When a reindex/rebuild renames the live dir to a backup and
+/// writes a fresh one in its place, those descriptors keep following the old
+/// (renamed) inodes: the server serves stale reads and lands writes in the
+/// orphaned backup while still returning `recorded: true` — a silent
+/// split-brain (issue #135).
+///
+/// Detection is via [`AppContext::store_identity`] (device+inode of the db file
+/// and index dir), which changes only when the files are *replaced*, never on
+/// ordinary in-place writes — so this never triggers a spurious reopen. A reopen
+/// is skipped while the db is absent (a rebuild swapped the dir but has not yet
+/// created the fresh db) so we do not fabricate an empty store; the change is
+/// then picked up on the next request once the new db exists. Reopen failures
+/// (e.g. a half-written rebuild) leave the current handles in place and are
+/// retried on the next request.
+fn maybe_reopen_stores(ctx: &mut AppContext, opened: &mut crate::app::StoreIdentity, debug: bool) {
+    let current = ctx.store_identity();
+    if current == *opened || !current.db_present() {
+        return;
+    }
+    match ctx.reopen_stores() {
+        Ok(()) => {
+            // Baseline against the store we actually reopened onto.
+            *opened = ctx.store_identity();
+            if debug {
+                eprintln!(
+                    "[ms-mcp] Backing store changed on disk; reopened SQLite DB + search index"
+                );
+            }
+        }
+        Err(e) => {
+            warn!("MCP: backing store changed on disk but reopen failed (will retry): {e}");
+            if debug {
+                eprintln!("[ms-mcp] reopen after store change failed (retry next request): {e}");
+            }
+        }
+    }
 }
 
 fn handle_request(ctx: &AppContext, line: &str, debug: bool) -> Option<JsonRpcResponse> {
